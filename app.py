@@ -34,7 +34,6 @@ def get_users():
     return response.data
 
 def get_change_logs():
-    # O select('*') já vai pegar a nova coluna 'tipo_cartucho' automaticamente
     response = supabase.table('trocas_cartucho').select('*, usuarios(name)').order('data_troca', desc=True).execute()
     return response.data
 
@@ -62,27 +61,44 @@ def run_app():
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
                 
-                # NOVO CAMPO PARA SELECIONAR O TIPO DO CARTUCHO
-                cartridge_type = st.radio("Tipo do Cartucho:", ("Preto", "Colorido"), horizontal=True)
+                # MUDANÇA: TROCADO 'st.radio' POR CAIXAS DE SELEÇÃO 'st.checkbox'
+                st.write("Marque o(s) tipo(s) de cartucho trocado(s):")
+                col_preto, col_colorido = st.columns(2)
+                trocou_preto = col_preto.checkbox("Preto")
+                trocou_colorido = col_colorido.checkbox("Colorido")
                 
                 change_date = st.date_input("Data da Troca:", datetime.now())
                 
                 if st.form_submit_button("Registrar Troca"):
-                    user_id = user_names[selected_user_name]
-                    formatted_date = change_date.strftime("%Y-%m-%d")
-                    try:
-                        # DADO DO NOVO CAMPO É INSERIDO AQUI
-                        supabase.table('trocas_cartucho').insert({
-                            'usuario_id': user_id, 
-                            'data_troca': formatted_date,
-                            'tipo_cartucho': cartridge_type
-                        }).execute()
-                        st.success(f"Troca de cartucho {cartridge_type.lower()} registrada para {selected_user_name}!")
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro: {e}")
+                    
+                    # MUDANÇA: LÓGICA PARA LIDAR COM UMA OU MÚLTIPLAS SELEÇÕES
+                    cartridge_type_string = ""
+                    if trocou_preto and trocou_colorido:
+                        cartridge_type_string = "Ambos"
+                    elif trocou_preto:
+                        cartridge_type_string = "Preto"
+                    elif trocou_colorido:
+                        cartridge_type_string = "Colorido"
+                    
+                    # Validação para garantir que pelo menos uma opção foi marcada
+                    if not cartridge_type_string:
+                        st.error("Por favor, selecione pelo menos um tipo de cartucho.")
+                    else:
+                        user_id = user_names[selected_user_name]
+                        formatted_date = change_date.strftime("%Y-%m-%d")
+                        try:
+                            supabase.table('trocas_cartucho').insert({
+                                'usuario_id': user_id, 
+                                'data_troca': formatted_date,
+                                'tipo_cartucho': cartridge_type_string
+                            }).execute()
+                            st.success(f"Troca de cartucho(s) '{cartridge_type_string}' registrada para {selected_user_name}!")
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro: {e}")
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
+        # Nenhuma alteração necessária aqui, os gráficos já se adaptarão ao novo valor "Ambos"
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
@@ -94,7 +110,6 @@ def run_app():
                     'ID Troca': log['id'],
                     'Data': log['data_troca'],
                     'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
-                    # NOVA INFORMAÇÃO SENDO PROCESSADA
                     'Tipo': log.get('tipo_cartucho', 'Não especificado')
                 })
             
@@ -126,19 +141,15 @@ def run_app():
                 else:
                     st.warning("Nenhum registro para o período selecionado.")
 
-            # NOVO GRÁFICO DE PIZZA
             with col2:
-                st.subheader("Proporção Preto vs. Colorido")
+                st.subheader("Proporção por Tipo de Cartucho")
                 if not df_filtrado.empty:
                     type_counts = df_filtrado['Tipo'].value_counts().reset_index()
                     type_counts.columns = ['Tipo', 'Quantidade']
                     titulo_grafico_pie = f"Proporção em {mes_selecionado}" if mes_selecionado != "Todos" else "Proporção Geral"
                     fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
                     st.plotly_chart(fig_pie, use_container_width=True)
-                else:
-                    st.write("") # Espaço vazio se não houver dados
 
-            # Gráfico de linha movido para baixo para melhor layout
             st.subheader("Trocas ao Longo do Tempo")
             monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
             fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title="Volume de Trocas por Mês", markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
@@ -147,12 +158,10 @@ def run_app():
             st.markdown("---")
             titulo_historico = f"Histórico de Trocas para {mes_selecionado}" if mes_selecionado != "Todos" else "Histórico Completo de Trocas"
             st.subheader(titulo_historico)
-            # TABELA DE HISTÓRICO ATUALIZADA
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
-        # (Esta página não precisa de alterações)
         st.header("Gerenciar Setores")
         with st.form("novo_usuario_form"):
             new_user_name = st.text_input("Nome do Novo Setor:")
@@ -172,7 +181,6 @@ def run_app():
             st.dataframe(df_users, use_container_width=True)
         else:
             st.info("Nenhum setor cadastrado.")
-
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
