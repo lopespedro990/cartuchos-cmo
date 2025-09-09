@@ -61,8 +61,7 @@ def run_app():
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
                 
-                # MUDANÇA: TROCADO 'st.radio' POR CAIXAS DE SELEÇÃO 'st.checkbox'
-                st.write("Marque o(s) tipo(s) de cartucho trocado(s):")
+                st.markdown("**Marque o(s) tipo(s) de cartucho trocado(s):**")
                 col_preto, col_colorido = st.columns(2)
                 trocou_preto = col_preto.checkbox("Preto")
                 trocou_colorido = col_colorido.checkbox("Colorido")
@@ -71,34 +70,44 @@ def run_app():
                 
                 if st.form_submit_button("Registrar Troca"):
                     
-                    # MUDANÇA: LÓGICA PARA LIDAR COM UMA OU MÚLTIPLAS SELEÇÕES
-                    cartridge_type_string = ""
-                    if trocou_preto and trocou_colorido:
-                        cartridge_type_string = "Ambos"
-                    elif trocou_preto:
-                        cartridge_type_string = "Preto"
-                    elif trocou_colorido:
-                        cartridge_type_string = "Colorido"
+                    # MUDANÇA: CRIA UMA LISTA DE TAREFAS DE INSERÇÃO
+                    tipos_a_registrar = []
+                    if trocou_preto:
+                        tipos_a_registrar.append("Preto")
+                    if trocou_colorido:
+                        tipos_a_registrar.append("Colorido")
                     
-                    # Validação para garantir que pelo menos uma opção foi marcada
-                    if not cartridge_type_string:
+                    if not tipos_a_registrar:
                         st.error("Por favor, selecione pelo menos um tipo de cartucho.")
                     else:
                         user_id = user_names[selected_user_name]
                         formatted_date = change_date.strftime("%Y-%m-%d")
-                        try:
-                            supabase.table('trocas_cartucho').insert({
-                                'usuario_id': user_id, 
-                                'data_troca': formatted_date,
-                                'tipo_cartucho': cartridge_type_string
-                            }).execute()
-                            st.success(f"Troca de cartucho(s) '{cartridge_type_string}' registrada para {selected_user_name}!")
-                        except Exception as e:
-                            st.error(f"Ocorreu um erro: {e}")
+                        
+                        erros = []
+                        sucessos = 0
+                        
+                        # MUDANÇA: FAZ UM LOOP E INSERE UM REGISTRO PARA CADA TIPO SELECIONADO
+                        for tipo in tipos_a_registrar:
+                            try:
+                                supabase.table('trocas_cartucho').insert({
+                                    'usuario_id': user_id, 
+                                    'data_troca': formatted_date,
+                                    'tipo_cartucho': tipo
+                                }).execute()
+                                sucessos += 1
+                            except Exception as e:
+                                erros.append(f"Falha ao registrar cartucho '{tipo}': {e}")
+
+                        # Exibe mensagens de sucesso ou erro
+                        if sucessos > 0:
+                            st.success(f"{sucessos} registro(s) de troca criado(s) com sucesso para {selected_user_name}!")
+                        if erros:
+                            for erro in erros:
+                                st.error(erro)
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
-        # Nenhuma alteração necessária aqui, os gráficos já se adaptarão ao novo valor "Ambos"
+        # Nenhuma alteração necessária aqui. O dashboard já lerá os registros individuais corretamente.
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
