@@ -15,19 +15,16 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- FUNÇÃO DE LOGIN (MODIFICADA) ---
+# --- FUNÇÃO DE LOGIN ---
 def show_login_form():
-    """Mostra o formulário de login e atualiza o session_state."""
     st.title("🔐 Acesso Restrito")
     password = st.text_input("Digite a senha para acessar:", type="password", key="password")
 
     if st.button("Entrar"):
-        # Verifica se a senha digitada é a mesma que está nos Secrets
         if password == st.secrets["auth"]["password"]:
             st.session_state['password_correct'] = True
-            # Limpa o campo da senha para segurança
             del st.session_state['password'] 
-            st.rerun()  # Força o recarregamento do script
+            st.rerun()
         else:
             st.error("Senha incorreta.")
 
@@ -37,12 +34,12 @@ def get_users():
     return response.data
 
 def get_change_logs():
+    # O select('*') já vai pegar a nova coluna 'tipo_cartucho' automaticamente
     response = supabase.table('trocas_cartucho').select('*, usuarios(name)').order('data_troca', desc=True).execute()
     return response.data
 
-# --- APLICAÇÃO PRINCIPAL (SÓ RODA SE A SENHA ESTIVER CORRETA) ---
+# --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    # Adiciona um botão de Logout na barra lateral
     st.sidebar.title(f"Bem-vindo!")
     if st.sidebar.button("Sair (Logout)"):
         st.session_state['password_correct'] = False
@@ -53,7 +50,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # (O restante do seu código da aplicação continua aqui, sem alterações)
+    # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Cartucho")
         users = get_users()
@@ -64,17 +61,27 @@ def run_app():
         else:
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
+                
+                # NOVO CAMPO PARA SELECIONAR O TIPO DO CARTUCHO
+                cartridge_type = st.radio("Tipo do Cartucho:", ("Preto", "Colorido"), horizontal=True)
+                
                 change_date = st.date_input("Data da Troca:", datetime.now())
                 
                 if st.form_submit_button("Registrar Troca"):
                     user_id = user_names[selected_user_name]
                     formatted_date = change_date.strftime("%Y-%m-%d")
                     try:
-                        supabase.table('trocas_cartucho').insert({'usuario_id': user_id, 'data_troca': formatted_date}).execute()
-                        st.success(f"Troca registrada com sucesso para {selected_user_name}!")
+                        # DADO DO NOVO CAMPO É INSERIDO AQUI
+                        supabase.table('trocas_cartucho').insert({
+                            'usuario_id': user_id, 
+                            'data_troca': formatted_date,
+                            'tipo_cartucho': cartridge_type
+                        }).execute()
+                        st.success(f"Troca de cartucho {cartridge_type.lower()} registrada para {selected_user_name}!")
                     except Exception as e:
                         st.error(f"Ocorreu um erro: {e}")
 
+    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
@@ -86,7 +93,9 @@ def run_app():
                 processed_logs.append({
                     'ID Troca': log['id'],
                     'Data': log['data_troca'],
-                    'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido')
+                    'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
+                    # NOVA INFORMAÇÃO SENDO PROCESSADA
+                    'Tipo': log.get('tipo_cartucho', 'Não especificado')
                 })
             
             df = pd.DataFrame(processed_logs)
@@ -102,31 +111,48 @@ def run_app():
             
             df_filtrado = df if mes_selecionado == "Todos" else df[df['AnoMês'] == mes_selecionado]
             
+            st.markdown("### Gráficos de Análise")
             col1, col2 = st.columns(2)
+
             with col1:
                 st.subheader("Total de Trocas por Setor")
                 if not df_filtrado.empty:
                     user_counts = df_filtrado['Setor'].value_counts().reset_index()
                     user_counts.columns = ['Setor', 'Total de Trocas']
-                    titulo_grafico_bar = f"Quem mais trocou em {mes_selecionado}" if mes_selecionado != "Todos" else "Quem mais troca cartuchos (Geral)"
+                    titulo_grafico_bar = f"Setores que mais trocaram em {mes_selecionado}" if mes_selecionado != "Todos" else "Setores que mais trocam (Geral)"
                     fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
                     fig_bar.update_traces(textposition='outside')
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.warning("Nenhum registro para o período selecionado.")
 
+            # NOVO GRÁFICO DE PIZZA
             with col2:
-                st.subheader("Trocas ao Longo do Tempo")
-                monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
-                fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title="Volume de Trocas por Mês", markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
-                st.plotly_chart(fig_line, use_container_width=True)
+                st.subheader("Proporção Preto vs. Colorido")
+                if not df_filtrado.empty:
+                    type_counts = df_filtrado['Tipo'].value_counts().reset_index()
+                    type_counts.columns = ['Tipo', 'Quantidade']
+                    titulo_grafico_pie = f"Proporção em {mes_selecionado}" if mes_selecionado != "Todos" else "Proporção Geral"
+                    fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                else:
+                    st.write("") # Espaço vazio se não houver dados
+
+            # Gráfico de linha movido para baixo para melhor layout
+            st.subheader("Trocas ao Longo do Tempo")
+            monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
+            fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title="Volume de Trocas por Mês", markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
+            st.plotly_chart(fig_line, use_container_width=True)
             
             st.markdown("---")
             titulo_historico = f"Histórico de Trocas para {mes_selecionado}" if mes_selecionado != "Todos" else "Histórico Completo de Trocas"
             st.subheader(titulo_historico)
-            st.dataframe(df_filtrado[['Data', 'Setor']].reset_index(drop=True), use_container_width=True)
+            # TABELA DE HISTÓRICO ATUALIZADA
+            st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
+    # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
+        # (Esta página não precisa de alterações)
         st.header("Gerenciar Setores")
         with st.form("novo_usuario_form"):
             new_user_name = st.text_input("Nome do Novo Setor:")
@@ -148,13 +174,10 @@ def run_app():
             st.info("Nenhum setor cadastrado.")
 
 
-# --- LÓGICA PRINCIPAL DE EXECUÇÃO (MODIFICADA) ---
-
-# Inicializa o estado da sessão se ainda não existir
+# --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
     st.session_state['password_correct'] = False
 
-# Mostra a aplicação principal se a senha estiver correta, senão, mostra o login
 if st.session_state['password_correct']:
     run_app()
 else:
