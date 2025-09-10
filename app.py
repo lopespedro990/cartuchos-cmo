@@ -167,7 +167,7 @@ def run_app():
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES (MODIFICADA) ---
+    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
 
@@ -186,44 +186,40 @@ def run_app():
         
         st.markdown("---")
         
-        # Seção para remover setor existente
-        st.subheader("Remover um Setor")
+        # Seção para listar e remover setores existentes
+        st.subheader("Lista de Setores Cadastrados")
         users_data = get_users()
         
         if not users_data:
-            st.info("Nenhum setor cadastrado para remover.")
-        else:
-            user_map = {user['name']: user['id'] for user in users_data}
-            user_names_list = list(user_map.keys())
-            
-            selected_user_to_delete = st.selectbox("Selecione um setor para remover:", options=user_names_list)
-            
-            if st.button("Remover Setor Selecionado", type="primary"):
-                user_id_to_delete = user_map[selected_user_to_delete]
-                
-                # Passo 1: Verificar se o setor tem registros de troca associados
-                response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id_to_delete).execute()
-                
-                # A contagem de registros estará em response.count
-                if response.count > 0:
-                    st.error(f"O setor '{selected_user_to_delete}' não pode ser removido pois possui {response.count} registro(s) de troca associados.")
-                    st.warning("Para remover este setor, você precisa primeiro apagar seu histórico de trocas diretamente no banco de dados Supabase.")
-                else:
-                    # Passo 2: Se não houver registros, permitir a remoção
-                    try:
-                        supabase.table('usuarios').delete().eq('id', user_id_to_delete).execute()
-                        st.success(f"Setor '{selected_user_to_delete}' removido com sucesso!")
-                        st.rerun() # Recarrega a página para atualizar a lista
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro ao tentar remover o setor: {e}")
-
-        st.markdown("---")
-        st.subheader("Lista de Setores Cadastrados")
-        if users_data:
-            df_users = pd.DataFrame(users_data)[['name']].rename(columns={'name': 'Nome do Setor'})
-            st.dataframe(df_users, use_container_width=True)
-        else:
             st.info("Nenhum setor cadastrado.")
+        else:
+            # Loop para exibir cada setor com seu botão de remover
+            for user in users_data:
+                user_id = user['id']
+                user_name = user['name']
+                
+                col1, col2 = st.columns([4, 1]) # Coluna do nome maior que a do botão
+                
+                with col1:
+                    st.text(user_name)
+                
+                with col2:
+                    # Cria um botão único para cada setor usando a 'key'
+                    if st.button("Remover", key=f"delete_{user_id}", type="primary"):
+                        # Passo 1: Verificar se o setor tem registros de troca associados
+                        response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                        
+                        if response.count > 0:
+                            st.error(f"'{user_name}' não pode ser removido pois possui {response.count} registro(s) associados.")
+                        else:
+                            # Passo 2: Se não houver registros, permitir a remoção
+                            try:
+                                supabase.table('usuarios').delete().eq('id', user_id).execute()
+                                st.success(f"Setor '{user_name}' removido com sucesso!")
+                                st.rerun() # Recarrega a página para atualizar a lista
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+                st.markdown("---") # Linha divisória para cada item
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
