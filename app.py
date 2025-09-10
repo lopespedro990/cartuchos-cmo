@@ -167,11 +167,10 @@ def run_app():
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA) ---
+    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA COM ÍCONES) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
 
-        # Seção para adicionar novo setor
         with st.expander("Adicionar Novo Setor"):
             with st.form("novo_setor_form", clear_on_submit=True):
                 new_user_name = st.text_input("Nome do Novo Setor:")
@@ -186,40 +185,46 @@ def run_app():
         
         st.markdown("---")
         
-        # Seção para listar e remover setores existentes
         st.subheader("Lista de Setores Cadastrados")
         users_data = get_users()
         
         if not users_data:
             st.info("Nenhum setor cadastrado.")
         else:
-            # Loop para exibir cada setor com seu botão de remover
+            # Cria um cabeçalho para a nossa lista/tabela simulada
+            header_cols = st.columns([4, 1])
+            header_cols[0].write("**Nome do Setor**")
+            header_cols[1].write("**Ação**")
+
+            st.divider() # Linha divisória mais sutil
+
+            # Loop para exibir cada setor com seu ícone de remoção
             for user in users_data:
                 user_id = user['id']
                 user_name = user['name']
                 
-                col1, col2 = st.columns([4, 1]) # Coluna do nome maior que a do botão
+                row_cols = st.columns([4, 1])
                 
-                with col1:
-                    st.text(user_name)
+                # Exibe o nome do setor na primeira coluna
+                row_cols[0].write(user_name)
                 
-                with col2:
-                    # Cria um botão único para cada setor usando a 'key'
-                    if st.button("Remover", key=f"delete_{user_id}", type="primary"):
-                        # Passo 1: Verificar se o setor tem registros de troca associados
-                        response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
-                        
-                        if response.count > 0:
-                            st.error(f"'{user_name}' não pode ser removido pois possui {response.count} registro(s) associados.")
-                        else:
-                            # Passo 2: Se não houver registros, permitir a remoção
-                            try:
-                                supabase.table('usuarios').delete().eq('id', user_id).execute()
-                                st.success(f"Setor '{user_name}' removido com sucesso!")
-                                st.rerun() # Recarrega a página para atualizar a lista
-                            except Exception as e:
-                                st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
-                st.markdown("---") # Linha divisória para cada item
+                # Cria o botão com ícone na segunda coluna
+                button_col = row_cols[1]
+                if button_col.button("🗑️", key=f"delete_{user_id}", help=f"Remover o setor '{user_name}'"):
+                    
+                    # Lógica de segurança para remoção
+                    response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                    
+                    if response.count > 0:
+                        st.error(f"'{user_name}' não pode ser removido pois possui {response.count} registro(s) associados.")
+                    else:
+                        try:
+                            supabase.table('usuarios').delete().eq('id', user_id).execute()
+                            st.success(f"Setor '{user_name}' removido com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
