@@ -39,9 +39,10 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    logo_url = "https://i.ibb.co/fVb8h4JN/Design-sem-nome.png"
-    st.sidebar.image(logo_url, use_container_width=150)
-    if st.sidebar.button("Sair"):
+    logo_url = "https://www.camaraou.sp.gov.br/imagens/logo-horizontal-branco-e-verde-2.png/image"
+    st.sidebar.image(logo_url, use_container_width=True)
+
+    if st.sidebar.button("Sair (Logout)"):
         st.session_state['password_correct'] = False
         st.rerun()
 
@@ -71,7 +72,6 @@ def run_app():
                 
                 if st.form_submit_button("Registrar Troca"):
                     
-                    # MUDANÇA: CRIA UMA LISTA DE TAREFAS DE INSERÇÃO
                     tipos_a_registrar = []
                     if trocou_preto:
                         tipos_a_registrar.append("Preto")
@@ -87,7 +87,6 @@ def run_app():
                         erros = []
                         sucessos = 0
                         
-                        # MUDANÇA: FAZ UM LOOP E INSERE UM REGISTRO PARA CADA TIPO SELECIONADO
                         for tipo in tipos_a_registrar:
                             try:
                                 supabase.table('trocas_cartucho').insert({
@@ -99,7 +98,6 @@ def run_app():
                             except Exception as e:
                                 erros.append(f"Falha ao registrar cartucho '{tipo}': {e}")
 
-                        # Exibe mensagens de sucesso ou erro
                         if sucessos > 0:
                             st.success(f"{sucessos} registro(s) de troca criado(s) com sucesso para {selected_user_name}!")
                         if erros:
@@ -108,7 +106,6 @@ def run_app():
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
-        # Nenhuma alteração necessária aqui. O dashboard já lerá os registros individuais corretamente.
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
@@ -170,22 +167,58 @@ def run_app():
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES ---
+    # --- PÁGINA: GERENCIAR SETORES (MODIFICADA) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
-        with st.form("novo_usuario_form"):
-            new_user_name = st.text_input("Nome do Novo Setor:")
-            if st.form_submit_button("Adicionar Setor"):
-                if new_user_name:
-                    try:
-                        supabase.table('usuarios').insert({'name': new_user_name}).execute()
-                        st.success(f"Setor '{new_user_name}' adicionado!")
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro: {e}")
+
+        # Seção para adicionar novo setor
+        with st.expander("Adicionar Novo Setor"):
+            with st.form("novo_setor_form", clear_on_submit=True):
+                new_user_name = st.text_input("Nome do Novo Setor:")
+                if st.form_submit_button("Adicionar Setor"):
+                    if new_user_name:
+                        try:
+                            supabase.table('usuarios').insert({'name': new_user_name}).execute()
+                            st.success(f"Setor '{new_user_name}' adicionado!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro: {e}")
         
         st.markdown("---")
-        st.subheader("Lista de Setores Cadastrados")
+        
+        # Seção para remover setor existente
+        st.subheader("Remover um Setor")
         users_data = get_users()
+        
+        if not users_data:
+            st.info("Nenhum setor cadastrado para remover.")
+        else:
+            user_map = {user['name']: user['id'] for user in users_data}
+            user_names_list = list(user_map.keys())
+            
+            selected_user_to_delete = st.selectbox("Selecione um setor para remover:", options=user_names_list)
+            
+            if st.button("Remover Setor Selecionado", type="primary"):
+                user_id_to_delete = user_map[selected_user_to_delete]
+                
+                # Passo 1: Verificar se o setor tem registros de troca associados
+                response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id_to_delete).execute()
+                
+                # A contagem de registros estará em response.count
+                if response.count > 0:
+                    st.error(f"O setor '{selected_user_to_delete}' não pode ser removido pois possui {response.count} registro(s) de troca associados.")
+                    st.warning("Para remover este setor, você precisa primeiro apagar seu histórico de trocas diretamente no banco de dados Supabase.")
+                else:
+                    # Passo 2: Se não houver registros, permitir a remoção
+                    try:
+                        supabase.table('usuarios').delete().eq('id', user_id_to_delete).execute()
+                        st.success(f"Setor '{selected_user_to_delete}' removido com sucesso!")
+                        st.rerun() # Recarrega a página para atualizar a lista
+                    except Exception as e:
+                        st.error(f"Ocorreu um erro ao tentar remover o setor: {e}")
+
+        st.markdown("---")
+        st.subheader("Lista de Setores Cadastrados")
         if users_data:
             df_users = pd.DataFrame(users_data)[['name']].rename(columns={'name': 'Nome do Setor'})
             st.dataframe(df_users, use_container_width=True)
