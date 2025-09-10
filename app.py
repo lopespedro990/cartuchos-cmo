@@ -167,7 +167,7 @@ def run_app():
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA COM ÍCONES) ---
+    # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
 
@@ -191,28 +191,24 @@ def run_app():
         if not users_data:
             st.info("Nenhum setor cadastrado.")
         else:
-            # Cria um cabeçalho para a nossa lista/tabela simulada
             header_cols = st.columns([4, 1])
             header_cols[0].write("**Nome do Setor**")
             header_cols[1].write("**Ação**")
 
-            st.divider() # Linha divisória mais sutil
+            # MUDANÇA: Substituímos o st.divider() por um st.markdown com CSS customizado
+            st.markdown("<hr style='margin-top: 5px; margin-bottom: 5px;'>", unsafe_allow_html=True)
 
-            # Loop para exibir cada setor com seu ícone de remoção
             for user in users_data:
                 user_id = user['id']
                 user_name = user['name']
                 
                 row_cols = st.columns([4, 1])
                 
-                # Exibe o nome do setor na primeira coluna
                 row_cols[0].write(user_name)
                 
-                # Cria o botão com ícone na segunda coluna
                 button_col = row_cols[1]
                 if button_col.button("🗑️", key=f"delete_{user_id}", help=f"Remover o setor '{user_name}'"):
                     
-                    # Lógica de segurança para remoção
                     response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
                     
                     if response.count > 0:
