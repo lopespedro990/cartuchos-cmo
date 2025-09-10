@@ -39,8 +39,9 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    st.sidebar.title(f"Bem-vindo!")
-    if st.sidebar.button("Sair (Logout)"):
+    logo_url = "https://i.ibb.co/fVb8h4JN/Design-sem-nome.png"
+    st.sidebar.image(logo_url, use_column_width=True)
+    if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
         st.rerun()
 
