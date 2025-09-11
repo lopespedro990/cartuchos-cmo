@@ -39,7 +39,7 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    logo_url = "https://i.ibb.co/fVb8h4JN/Design-sem-nome.png"
+    logo_url = "https://www.camaraourinhos.sp.gov.br/img/customizacao/cliente/facebook/imagem_compartilhamento_redes.jpg"
     st.sidebar.image(logo_url, use_container_width=True)
 
     if st.sidebar.button("Sair (Logout)"):
