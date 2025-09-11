@@ -53,7 +53,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA (MODIFICADA) ---
+    # --- PÁGINA: REGISTRAR TROCA (CORRIGIDA) ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -68,9 +68,10 @@ def run_app():
                 categorias = ["Cartucho Jato de Tinta", "Suprimento Laser"]
                 categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
 
+                # LINHA CORRIGIDA AQUI
                 if categoria_selecionada == "Cartucho Jato de Tinta":
                     opcoes_tipo = ["Preto", "Colorido"]
-                else:
+                else:  # Suprimento Laser
                     opcoes_tipo = ["Toner", "Cilindro"]
 
                 tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
@@ -100,7 +101,7 @@ def run_app():
                         if erros: 
                             for erro in erros: st.error(erro)
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE (MODIFICADA) ---
+    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
@@ -171,7 +172,6 @@ def run_app():
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
-        # (Esta página não foi alterada)
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
