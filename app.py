@@ -39,10 +39,10 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    # MUDANÇA: CSS para esconder a mensagem "No results" do multiselect
+    # MUDANÇA: CSS para esconder a mensagem "No results" do multiselect (TENTATIVA 2)
     st.markdown("""
         <style>
-            [data-testid="stMultiSelect-NoResult"] {
+            .stMultiSelect [data-baseweb="popover"] ul li[role="option"]:first-of-type {
                 display: none;
             }
         </style>
@@ -82,7 +82,6 @@ def run_app():
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
                 
-                # Voltamos ao st.multiselect, como você preferiu
                 tipos_a_registrar = st.multiselect(
                     "2. Marque o(s) tipo(s) trocado(s):",
                     opcoes_tipo,
@@ -117,7 +116,6 @@ def run_app():
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
-        # (Esta página não precisa de alterações)
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
@@ -177,12 +175,11 @@ def run_app():
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
-        # (Esta página não foi alterada)
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
         if st.session_state.deleting_sector_id is not None:
-            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca. Esta ação é irreversível.")
+            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
                 password = st.text_input("Para confirmar, digite a senha de administrador:", type="password")
                 col_confirm, col_cancel = st.columns(2)
