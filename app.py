@@ -44,6 +44,9 @@ def run_app():
 
     if st.sidebar.button("Sair (Logout)"):
         st.session_state['password_correct'] = False
+        # Limpa o estado de exclusão ao sair para evitar que a tela de confirmação persista
+        if 'deleting_sector_id' in st.session_state:
+            del st.session_state['deleting_sector_id']
         st.rerun()
 
     st.title("🖨️ Gerenciador de Troca de Cartuchos")
@@ -53,59 +56,43 @@ def run_app():
 
     # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
+        # (Esta página não precisa de alterações)
         st.header("Registrar uma Nova Troca de Cartucho")
         users = get_users()
         user_names = {user['name']: user['id'] for user in users}
-
         if not users:
             st.warning("Nenhum setor cadastrado. Adicione um na página 'Gerenciar Setores'.")
         else:
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                
                 st.markdown("**Marque o(s) tipo(s) de cartucho trocado(s):**")
                 col_preto, col_colorido = st.columns(2)
                 trocou_preto = col_preto.checkbox("Preto")
                 trocou_colorido = col_colorido.checkbox("Colorido")
-                
                 change_date = st.date_input("Data da Troca:", datetime.now())
-                
                 if st.form_submit_button("Registrar Troca"):
-                    
                     tipos_a_registrar = []
-                    if trocou_preto:
-                        tipos_a_registrar.append("Preto")
-                    if trocou_colorido:
-                        tipos_a_registrar.append("Colorido")
-                    
+                    if trocou_preto: tipos_a_registrar.append("Preto")
+                    if trocou_colorido: tipos_a_registrar.append("Colorido")
                     if not tipos_a_registrar:
                         st.error("Por favor, selecione pelo menos um tipo de cartucho.")
                     else:
                         user_id = user_names[selected_user_name]
                         formatted_date = change_date.strftime("%Y-%m-%d")
-                        
-                        erros = []
-                        sucessos = 0
-                        
+                        erros, sucessos = [], 0
                         for tipo in tipos_a_registrar:
                             try:
-                                supabase.table('trocas_cartucho').insert({
-                                    'usuario_id': user_id, 
-                                    'data_troca': formatted_date,
-                                    'tipo_cartucho': tipo
-                                }).execute()
+                                supabase.table('trocas_cartucho').insert({'usuario_id': user_id, 'data_troca': formatted_date, 'tipo_cartucho': tipo}).execute()
                                 sucessos += 1
                             except Exception as e:
                                 erros.append(f"Falha ao registrar cartucho '{tipo}': {e}")
-
-                        if sucessos > 0:
-                            st.success(f"{sucessos} registro(s) de troca criado(s) com sucesso para {selected_user_name}!")
-                        if erros:
-                            for erro in erros:
-                                st.error(erro)
+                        if sucessos > 0: st.success(f"{sucessos} registro(s) de troca criado(s) com sucesso para {selected_user_name}!")
+                        if erros: 
+                            for erro in erros: st.error(erro)
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
+        # (Esta página não precisa de alterações)
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
@@ -114,28 +101,21 @@ def run_app():
             processed_logs = []
             for log in logs:
                 processed_logs.append({
-                    'ID Troca': log['id'],
-                    'Data': log['data_troca'],
+                    'ID Troca': log['id'], 'Data': log['data_troca'],
                     'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
                     'Tipo': log.get('tipo_cartucho', 'Não especificado')
                 })
-            
             df = pd.DataFrame(processed_logs)
             df['Data'] = pd.to_datetime(df['Data'])
             df = df.sort_values(by='Data', ascending=False)
-
-            st.sidebar.markdown("---")
-            st.sidebar.header("Filtros do Dashboard")
+            st.sidebar.markdown("---"); st.sidebar.header("Filtros do Dashboard")
             df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
             lista_meses = sorted(df['AnoMês'].unique(), reverse=True)
             lista_meses.insert(0, "Todos")
             mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
-            
             df_filtrado = df if mes_selecionado == "Todos" else df[df['AnoMês'] == mes_selecionado]
-            
             st.markdown("### Gráficos de Análise")
             col1, col2 = st.columns(2)
-
             with col1:
                 st.subheader("Total de Trocas por Setor")
                 if not df_filtrado.empty:
@@ -143,11 +123,8 @@ def run_app():
                     user_counts.columns = ['Setor', 'Total de Trocas']
                     titulo_grafico_bar = f"Setores que mais trocaram em {mes_selecionado}" if mes_selecionado != "Todos" else "Setores que mais trocam (Geral)"
                     fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
-                    fig_bar.update_traces(textposition='outside')
-                    st.plotly_chart(fig_bar, use_container_width=True)
-                else:
-                    st.warning("Nenhum registro para o período selecionado.")
-
+                    fig_bar.update_traces(textposition='outside'); st.plotly_chart(fig_bar, use_container_width=True)
+                else: st.warning("Nenhum registro para o período selecionado.")
             with col2:
                 st.subheader("Proporção por Tipo de Cartucho")
                 if not df_filtrado.empty:
@@ -156,71 +133,98 @@ def run_app():
                     titulo_grafico_pie = f"Proporção em {mes_selecionado}" if mes_selecionado != "Todos" else "Proporção Geral"
                     fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
                     st.plotly_chart(fig_pie, use_container_width=True)
-
             st.subheader("Trocas ao Longo do Tempo")
             monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
             fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title="Volume de Trocas por Mês", markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
             st.plotly_chart(fig_line, use_container_width=True)
-            
             st.markdown("---")
             titulo_historico = f"Histórico de Trocas para {mes_selecionado}" if mes_selecionado != "Todos" else "Histórico Completo de Trocas"
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES ---
+    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA COM EXCLUSÃO SEGURA) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
 
-        with st.expander("Adicionar Novo Setor"):
-            with st.form("novo_setor_form", clear_on_submit=True):
-                new_user_name = st.text_input("Nome do Novo Setor:")
-                if st.form_submit_button("Adicionar Setor"):
-                    if new_user_name:
-                        try:
-                            supabase.table('usuarios').insert({'name': new_user_name}).execute()
-                            st.success(f"Setor '{new_user_name}' adicionado!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Ocorreu um erro: {e}")
-        
-        st.markdown("---")
-        
-        st.subheader("Lista de Setores Cadastrados")
-        users_data = get_users()
-        
-        if not users_data:
-            st.info("Nenhum setor cadastrado.")
+        # Inicializa o estado de exclusão se não existir
+        if 'deleting_sector_id' not in st.session_state:
+            st.session_state.deleting_sector_id = None
+            st.session_state.deleting_sector_name = None
+            st.session_state.deleting_sector_logs_count = 0
+
+        # --- TELA DE CONFIRMAÇÃO DE EXCLUSÃO ---
+        if st.session_state.deleting_sector_id is not None:
+            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca de cartucho. Esta ação é irreversível.")
+            
+            with st.form("confirm_delete_form"):
+                password = st.text_input("Para confirmar, digite a senha de administrador:", type="password")
+                
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.form_submit_button("Confirmar Exclusão Permanente", type="primary"):
+                        if password == st.secrets["auth"]["password"]:
+                            try:
+                                # 1. Apaga os registros de troca (filhos)
+                                supabase.table('trocas_cartucho').delete().eq('usuario_id', st.session_state.deleting_sector_id).execute()
+                                # 2. Apaga o setor (pai)
+                                supabase.table('usuarios').delete().eq('id', st.session_state.deleting_sector_id).execute()
+                                
+                                st.success(f"O setor '{st.session_state.deleting_sector_name}' e todos os seus registros foram removidos com sucesso!")
+                                # Limpa o estado e recarrega
+                                st.session_state.deleting_sector_id = None
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro durante a exclusão: {e}")
+                        else:
+                            st.error("Senha incorreta. A exclusão não foi realizada.")
+                
+                with col_cancel:
+                    if st.form_submit_button("Cancelar"):
+                        st.session_state.deleting_sector_id = None
+                        st.rerun()
+
+        # --- TELA PRINCIPAL DE GERENCIAMENTO ---
         else:
-            header_cols = st.columns([4, 1])
-            header_cols[0].write("**Nome do Setor**")
-            header_cols[1].write("**Ação**")
-
-            # MUDANÇA: Substituímos o st.divider() por um st.markdown com CSS customizado
-            st.markdown("<hr style='margin-top: 5px; margin-bottom: 5px;'>", unsafe_allow_html=True)
-
-            for user in users_data:
-                user_id = user['id']
-                user_name = user['name']
-                
-                row_cols = st.columns([4, 1])
-                
-                row_cols[0].write(user_name)
-                
-                button_col = row_cols[1]
-                if button_col.button("🗑️", key=f"delete_{user_id}", help=f"Remover o setor '{user_name}'"):
-                    
-                    response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
-                    
-                    if response.count > 0:
-                        st.error(f"'{user_name}' não pode ser removido pois possui {response.count} registro(s) associados.")
-                    else:
-                        try:
-                            supabase.table('usuarios').delete().eq('id', user_id).execute()
-                            st.success(f"Setor '{user_name}' removido com sucesso!")
+            with st.expander("Adicionar Novo Setor"):
+                with st.form("novo_setor_form", clear_on_submit=True):
+                    new_user_name = st.text_input("Nome do Novo Setor:")
+                    if st.form_submit_button("Adicionar Setor"):
+                        if new_user_name:
+                            try:
+                                supabase.table('usuarios').insert({'name': new_user_name}).execute()
+                                st.success(f"Setor '{new_user_name}' adicionado!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro: {e}")
+            
+            st.markdown("---")
+            st.subheader("Lista de Setores Cadastrados")
+            users_data = get_users()
+            
+            if not users_data:
+                st.info("Nenhum setor cadastrado.")
+            else:
+                for user in users_data:
+                    user_id, user_name = user['id'], user['name']
+                    col1, col2 = st.columns([4, 1])
+                    col1.text(user_name)
+                    if col2.button("Remover", key=f"delete_{user_id}", type="primary"):
+                        response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                        
+                        if response.count > 0:
+                            # ATIVA O MODO DE CONFIRMAÇÃO
+                            st.session_state.deleting_sector_id = user_id
+                            st.session_state.deleting_sector_name = user_name
+                            st.session_state.deleting_sector_logs_count = response.count
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
-
+                        else:
+                            try:
+                                supabase.table('usuarios').delete().eq('id', user_id).execute()
+                                st.success(f"Setor '{user_name}' removido com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+                    st.markdown("---")
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
