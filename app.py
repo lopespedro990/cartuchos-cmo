@@ -39,19 +39,10 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    # MUDANÇA: CSS para esconder a mensagem "No results" do multiselect (TENTATIVA 2)
-    st.markdown("""
-        <style>
-            .stMultiSelect [data-baseweb="popover"] ul li[role="option"]:first-of-type {
-                display: none;
-            }
-        </style>
-    """, unsafe_allow_html=True)
-
-    logo_url = "https://www.camaraou.sp.gov.br/imagens/logo-horizontal-branco-e-verde-2.png/image"
+    logo_url = "https://www.camaraourinhos.sp.gov.br/img/customizacao/cliente/facebook/imagem_compartilhamento_redes.jpg"
     st.sidebar.image(logo_url, use_container_width=True)
 
-    if st.sidebar.button("Sair (Logout)"):
+    if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
         if 'deleting_sector_id' in st.session_state:
             del st.session_state['deleting_sector_id']
@@ -82,8 +73,9 @@ def run_app():
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
                 
+                # MUDANÇA AQUI: Adicionado o parâmetro 'placeholder'
                 tipos_a_registrar = st.multiselect(
-                    "2. Marque o(s) tipo(s) trocado(s):",
+                    "2. Marque o(s) tipo(s) trocado(s):", 
                     opcoes_tipo,
                     placeholder="Selecione as opções"
                 )
@@ -133,18 +125,25 @@ def run_app():
             df = pd.DataFrame(processed_logs)
             df['Data'] = pd.to_datetime(df['Data'])
             df = df.sort_values(by='Data', ascending=False)
-            st.sidebar.markdown("---"); st.sidebar.header("Filtros do Dashboard")
+
+            st.sidebar.markdown("---")
+            st.sidebar.header("Filtros do Dashboard")
+            
             categorias_filtro = ["Todas"] + df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist()
             categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
+            
             df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
             lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
             mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
+            
             df_filtrado = df
             if categoria_filtrada != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['Categoria'] == categoria_filtrada]
             if mes_selecionado != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['AnoMês'] == mes_selecionado]
+            
             st.markdown("### Gráficos de Análise")
+            
             if df_filtrado.empty:
                 st.warning("Nenhum registro encontrado para os filtros selecionados.")
             else:
@@ -156,6 +155,7 @@ def run_app():
                     titulo_grafico_bar = f"Setores que mais trocaram ({categoria_filtrada}, {mes_selecionado})"
                     fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
                     fig_bar.update_traces(textposition='outside'); st.plotly_chart(fig_bar, use_container_width=True)
+
                 with col2:
                     st.subheader("Proporção por Tipo de Suprimento")
                     type_counts = df_filtrado['Tipo'].value_counts().reset_index()
@@ -163,11 +163,13 @@ def run_app():
                     titulo_grafico_pie = f"Proporção ({categoria_filtrada}, {mes_selecionado})"
                     fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
                     st.plotly_chart(fig_pie, use_container_width=True)
+
                 st.subheader("Trocas ao Longo do Tempo")
                 monthly_changes = df_filtrado.groupby('AnoMês').size().reset_index(name='Quantidade')
                 titulo_grafico_linha = f"Volume de Trocas por Mês ({categoria_filtrada})"
                 fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
                 st.plotly_chart(fig_line, use_container_width=True)
+                
                 st.markdown("---")
                 titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
                 st.subheader(titulo_historico)
@@ -178,8 +180,9 @@ def run_app():
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
+
         if st.session_state.deleting_sector_id is not None:
-            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
+            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca de cartucho. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
                 password = st.text_input("Para confirmar, digite a senha de administrador:", type="password")
                 col_confirm, col_cancel = st.columns(2)
@@ -189,7 +192,7 @@ def run_app():
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('usuario_id', st.session_state.deleting_sector_id).execute()
                                 supabase.table('usuarios').delete().eq('id', st.session_state.deleting_sector_id).execute()
-                                st.success(f"O setor '{st.session_state.deleting_sector_name}' e seus registros foram removidos com sucesso!")
+                                st.success(f"O setor '{st.session_state.deleting_sector_name}' e todos os seus registros foram removidos com sucesso!")
                                 st.session_state.deleting_sector_id = None
                                 st.rerun()
                             except Exception as e:
