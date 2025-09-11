@@ -5,7 +5,7 @@ from supabase import create_client, Client
 from datetime import datetime
 
 # --- CONFIGURAÇÃO DA PÁGINA E SUPABASE ---
-st.set_page_config(layout="wide", page_title="Gerenciador de Cartuchos")
+st.set_page_config(layout="wide", page_title="Gerenciador de Suprimentos")
 
 @st.cache_resource
 def init_connection():
@@ -48,50 +48,60 @@ def run_app():
             del st.session_state['deleting_sector_id']
         st.rerun()
 
-    st.title("🖨️ Gerenciador de Troca de Cartuchos")
+    st.title("🖨️ Gerenciador de Suprimentos de Impressão")
     st.markdown("---")
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA ---
+    # --- PÁGINA: REGISTRAR TROCA (MODIFICADA) ---
     if page == "Registrar Troca":
-        # (Esta página não precisa de alterações)
-        st.header("Registrar uma Nova Troca de Cartucho")
+        st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
         user_names = {user['name']: user['id'] for user in users}
+
         if not users:
-            st.warning("Nenhum setor cadastrado. Adicione um na página 'Gerenciar Setores'.")
+            st.warning("Nenhum setor cadastrado.")
         else:
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                st.markdown("**Marque o(s) tipo(s) de cartucho trocado(s):**")
-                col_preto, col_colorido = st.columns(2)
-                trocou_preto = col_preto.checkbox("Preto")
-                trocou_colorido = col_colorido.checkbox("Colorido")
-                change_date = st.date_input("Data da Troca:", datetime.now())
+                
+                categorias = ["Cartucho Jato de Tinta", "Suprimento Laser"]
+                categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
+
+                if categoria_selecionada == "Cartucho Jato de Tinta":
+                    opcoes_tipo = ["Preto", "Colorido"]
+                else:
+                    opcoes_tipo = ["Toner", "Cilindro"]
+
+                tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
+                change_date = st.date_input("3. Data da Troca:", datetime.now())
+                
                 if st.form_submit_button("Registrar Troca"):
-                    tipos_a_registrar = []
-                    if trocou_preto: tipos_a_registrar.append("Preto")
-                    if trocou_colorido: tipos_a_registrar.append("Colorido")
                     if not tipos_a_registrar:
-                        st.error("Por favor, selecione pelo menos um tipo de cartucho.")
+                        st.error("Por favor, selecione pelo menos um tipo de suprimento.")
                     else:
                         user_id = user_names[selected_user_name]
                         formatted_date = change_date.strftime("%Y-%m-%d")
-                        erros, sucessos = [], 0
+                        sucessos, erros = 0, []
+                        
                         for tipo in tipos_a_registrar:
                             try:
-                                supabase.table('trocas_cartucho').insert({'usuario_id': user_id, 'data_troca': formatted_date, 'tipo_cartucho': tipo}).execute()
+                                supabase.table('trocas_cartucho').insert({
+                                    'usuario_id': user_id, 
+                                    'data_troca': formatted_date,
+                                    'categoria': categoria_selecionada,
+                                    'tipo': tipo
+                                }).execute()
                                 sucessos += 1
                             except Exception as e:
-                                erros.append(f"Falha ao registrar cartucho '{tipo}': {e}")
-                        if sucessos > 0: st.success(f"{sucessos} registro(s) de troca criado(s) com sucesso para {selected_user_name}!")
+                                erros.append(f"Falha ao registrar '{tipo}': {e}")
+
+                        if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso para {selected_user_name}!")
                         if erros: 
                             for erro in erros: st.error(erro)
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
+    # --- PÁGINA: DASHBOARD DE ANÁLISE (MODIFICADA) ---
     elif page == "Dashboard de Análise":
-        # (Esta página não precisa de alterações)
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
         if not logs:
@@ -102,52 +112,69 @@ def run_app():
                 processed_logs.append({
                     'ID Troca': log['id'], 'Data': log['data_troca'],
                     'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
-                    'Tipo': log.get('tipo_cartucho', 'Não especificado')
+                    'Categoria': log.get('categoria', 'Não definida'),
+                    'Tipo': log.get('tipo', 'Não definido')
                 })
+            
             df = pd.DataFrame(processed_logs)
             df['Data'] = pd.to_datetime(df['Data'])
             df = df.sort_values(by='Data', ascending=False)
-            st.sidebar.markdown("---"); st.sidebar.header("Filtros do Dashboard")
+
+            st.sidebar.markdown("---")
+            st.sidebar.header("Filtros do Dashboard")
+            
+            categorias_filtro = ["Todas"] + df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist()
+            categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
+            
             df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-            lista_meses = sorted(df['AnoMês'].unique(), reverse=True)
-            lista_meses.insert(0, "Todos")
+            lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
             mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
-            df_filtrado = df if mes_selecionado == "Todos" else df[df['AnoMês'] == mes_selecionado]
+            
+            df_filtrado = df
+            if categoria_filtrada != "Todas":
+                df_filtrado = df_filtrado[df_filtrado['Categoria'] == categoria_filtrada]
+            if mes_selecionado != "Todos":
+                df_filtrado = df_filtrado[df_filtrado['AnoMês'] == mes_selecionado]
+            
             st.markdown("### Gráficos de Análise")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Total de Trocas por Setor")
-                if not df_filtrado.empty:
+            
+            if df_filtrado.empty:
+                st.warning("Nenhum registro encontrado para os filtros selecionados.")
+            else:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader("Total de Trocas por Setor")
                     user_counts = df_filtrado['Setor'].value_counts().reset_index()
                     user_counts.columns = ['Setor', 'Total de Trocas']
-                    titulo_grafico_bar = f"Setores que mais trocaram em {mes_selecionado}" if mes_selecionado != "Todos" else "Setores que mais trocam (Geral)"
+                    titulo_grafico_bar = f"Setores que mais trocaram ({categoria_filtrada}, {mes_selecionado})"
                     fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
                     fig_bar.update_traces(textposition='outside'); st.plotly_chart(fig_bar, use_container_width=True)
-                else: st.warning("Nenhum registro para o período selecionado.")
-            with col2:
-                st.subheader("Proporção por Tipo de Cartucho")
-                if not df_filtrado.empty:
+
+                with col2:
+                    st.subheader("Proporção por Tipo de Suprimento")
                     type_counts = df_filtrado['Tipo'].value_counts().reset_index()
                     type_counts.columns = ['Tipo', 'Quantidade']
-                    titulo_grafico_pie = f"Proporção em {mes_selecionado}" if mes_selecionado != "Todos" else "Proporção Geral"
+                    titulo_grafico_pie = f"Proporção ({categoria_filtrada}, {mes_selecionado})"
                     fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
                     st.plotly_chart(fig_pie, use_container_width=True)
-            st.subheader("Trocas ao Longo do Tempo")
-            monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
-            fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title="Volume de Trocas por Mês", markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
-            st.plotly_chart(fig_line, use_container_width=True)
-            st.markdown("---")
-            titulo_historico = f"Histórico de Trocas para {mes_selecionado}" if mes_selecionado != "Todos" else "Histórico Completo de Trocas"
-            st.subheader(titulo_historico)
-            st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
+
+                st.subheader("Trocas ao Longo do Tempo")
+                monthly_changes = df_filtrado.groupby('AnoMês').size().reset_index(name='Quantidade')
+                titulo_grafico_linha = f"Volume de Trocas por Mês ({categoria_filtrada})"
+                fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
+                st.plotly_chart(fig_line, use_container_width=True)
+                
+                st.markdown("---")
+                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
+                st.subheader(titulo_historico)
+                st.dataframe(df_filtrado[['Data', 'Setor', 'Categoria', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
+        # (Esta página não foi alterada)
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
-            st.session_state.deleting_sector_id = None
-            st.session_state.deleting_sector_name = None
-            st.session_state.deleting_sector_logs_count = 0
+            st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
 
         if st.session_state.deleting_sector_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca de cartucho. Esta ação é irreversível.")
@@ -183,32 +210,21 @@ def run_app():
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Ocorreu um erro: {e}")
-            
             st.markdown("---")
             st.subheader("Lista de Setores Cadastrados")
             users_data = get_users()
-            
             if not users_data:
                 st.info("Nenhum setor cadastrado.")
             else:
-                # MUDANÇA: Substituído o loop antigo por este, usando st.container
                 for user in users_data:
-                    # 'border=True' cria a caixa com borda
                     with st.container(border=True):
-                        user_id = user['id']
-                        user_name = user['name']
-                        
+                        user_id, user_name = user['id'], user['name']
                         col1, col2 = st.columns([4, 1])
-                        
-                        # Adicionado um pouco de estilo para alinhar o texto com o botão
                         col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
-                        
                         if col2.button("Remover", key=f"delete_{user_id}", type="primary"):
                             response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
                             if response.count > 0:
-                                st.session_state.deleting_sector_id = user_id
-                                st.session_state.deleting_sector_name = user_name
-                                st.session_state.deleting_sector_logs_count = response.count
+                                st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = user_id, user_name, response.count
                                 st.rerun()
                             else:
                                 try:
