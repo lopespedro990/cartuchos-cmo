@@ -44,7 +44,6 @@ def run_app():
 
     if st.sidebar.button("Sair (Logout)"):
         st.session_state['password_correct'] = False
-        # Limpa o estado de exclusão ao sair para evitar que a tela de confirmação persista
         if 'deleting_sector_id' in st.session_state:
             del st.session_state['deleting_sector_id']
         st.rerun()
@@ -142,48 +141,36 @@ def run_app():
             st.subheader(titulo_historico)
             st.dataframe(df_filtrado[['Data', 'Setor', 'Tipo']].reset_index(drop=True), use_container_width=True)
 
-    # --- PÁGINA: GERENCIAR SETORES (REESTRUTURADA COM EXCLUSÃO SEGURA) ---
+    # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
-
-        # Inicializa o estado de exclusão se não existir
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id = None
             st.session_state.deleting_sector_name = None
             st.session_state.deleting_sector_logs_count = 0
 
-        # --- TELA DE CONFIRMAÇÃO DE EXCLUSÃO ---
         if st.session_state.deleting_sector_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca de cartucho. Esta ação é irreversível.")
-            
             with st.form("confirm_delete_form"):
                 password = st.text_input("Para confirmar, digite a senha de administrador:", type="password")
-                
                 col_confirm, col_cancel = st.columns(2)
                 with col_confirm:
                     if st.form_submit_button("Confirmar Exclusão Permanente", type="primary"):
                         if password == st.secrets["auth"]["password"]:
                             try:
-                                # 1. Apaga os registros de troca (filhos)
                                 supabase.table('trocas_cartucho').delete().eq('usuario_id', st.session_state.deleting_sector_id).execute()
-                                # 2. Apaga o setor (pai)
                                 supabase.table('usuarios').delete().eq('id', st.session_state.deleting_sector_id).execute()
-                                
                                 st.success(f"O setor '{st.session_state.deleting_sector_name}' e todos os seus registros foram removidos com sucesso!")
-                                # Limpa o estado e recarrega
                                 st.session_state.deleting_sector_id = None
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Ocorreu um erro durante a exclusão: {e}")
                         else:
                             st.error("Senha incorreta. A exclusão não foi realizada.")
-                
                 with col_cancel:
                     if st.form_submit_button("Cancelar"):
                         st.session_state.deleting_sector_id = None
                         st.rerun()
-
-        # --- TELA PRINCIPAL DE GERENCIAMENTO ---
         else:
             with st.expander("Adicionar Novo Setor"):
                 with st.form("novo_setor_form", clear_on_submit=True):
@@ -204,27 +191,32 @@ def run_app():
             if not users_data:
                 st.info("Nenhum setor cadastrado.")
             else:
+                # MUDANÇA: Substituído o loop antigo por este, usando st.container
                 for user in users_data:
-                    user_id, user_name = user['id'], user['name']
-                    col1, col2 = st.columns([4, 1])
-                    col1.text(user_name)
-                    if col2.button("Remover", key=f"delete_{user_id}", type="primary"):
-                        response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                    # 'border=True' cria a caixa com borda
+                    with st.container(border=True):
+                        user_id = user['id']
+                        user_name = user['name']
                         
-                        if response.count > 0:
-                            # ATIVA O MODO DE CONFIRMAÇÃO
-                            st.session_state.deleting_sector_id = user_id
-                            st.session_state.deleting_sector_name = user_name
-                            st.session_state.deleting_sector_logs_count = response.count
-                            st.rerun()
-                        else:
-                            try:
-                                supabase.table('usuarios').delete().eq('id', user_id).execute()
-                                st.success(f"Setor '{user_name}' removido com sucesso!")
+                        col1, col2 = st.columns([4, 1])
+                        
+                        # Adicionado um pouco de estilo para alinhar o texto com o botão
+                        col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
+                        
+                        if col2.button("Remover", key=f"delete_{user_id}", type="primary"):
+                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                            if response.count > 0:
+                                st.session_state.deleting_sector_id = user_id
+                                st.session_state.deleting_sector_name = user_name
+                                st.session_state.deleting_sector_logs_count = response.count
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
-                    st.markdown("---")
+                            else:
+                                try:
+                                    supabase.table('usuarios').delete().eq('id', user_id).execute()
+                                    st.success(f"Setor '{user_name}' removido com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
