@@ -53,7 +53,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA ---
+    # --- PÁGINA: REGISTRAR TROCA (REESTRUTURADA) ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -62,23 +62,23 @@ def run_app():
         if not users:
             st.warning("Nenhum setor cadastrado.")
         else:
+            # PASSO 1: SELEÇÃO DA CATEGORIA (FORA DO FORM)
+            categorias = ["Cartucho Jato de Tinta", "Suprimento Laser"]
+            categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
+
+            # PASSO 2: DETERMINA AS OPÇÕES COM BASE NA SELEÇÃO
+            if categoria_selecionada == "Cartucho Jato de Tinta":
+                opcoes_tipo = ["Preto", "Colorido"]
+            else:  # Suprimento Laser
+                opcoes_tipo = ["Toner", "Cilindro"]
+
+            # PASSO 3: O FORM CONTÉM APENAS OS CAMPOS FINAIS
             with st.form("registro_troca_form"):
-                selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
+                st.info(f"Registrando para a categoria: **{categoria_selecionada}**")
                 
-                categorias = ["Cartucho Jato de Tinta", "Suprimento Laser"]
-                categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
-
-                # --- LINHA DE DEBUG ADICIONADA AQUI ---
-                st.write(f"DEBUG: O valor selecionado na categoria é: '{categoria_selecionada}'")
-                # ------------------------------------
-
-                if categoria_selecionada == "Cartucho Jato de Tinta":
-                    opcoes_tipo = ["Preto", "Colorido"]
-                else:
-                    opcoes_tipo = ["Toner", "Cilindro"]
-
-                tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
-                change_date = st.date_input("3. Data da Troca:", datetime.now())
+                selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
+                tipos_a_registrar = st.multiselect("Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
+                change_date = st.date_input("Data da Troca:", datetime.now())
                 
                 if st.form_submit_button("Registrar Troca"):
                     if not tipos_a_registrar:
