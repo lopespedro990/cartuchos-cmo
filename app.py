@@ -39,7 +39,7 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    logo_url = "https://www.camaraou.sp.gov.br/imagens/logo-horizontal-branco-e-verde-2.png/image"
+    logo_url = "https://i.ibb.co/fVb8h4JN/Design-sem-nome.png"
     st.sidebar.image(logo_url, use_container_width=True)
 
     if st.sidebar.button("Sair (Logout)"):
