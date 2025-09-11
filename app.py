@@ -53,7 +53,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA ---
+    # --- PÁGINA: REGISTRAR TROCA (MODIFICADA) ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -72,17 +72,21 @@ def run_app():
 
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                
-                # MUDANÇA AQUI: Adicionado o parâmetro 'placeholder'
-                tipos_a_registrar = st.multiselect(
-                    "2. Marque o(s) tipo(s) trocado(s):", 
-                    opcoes_tipo,
-                    placeholder="Selecione as opções"
-                )
-                
+
+                # MUDANÇA: Substituído o st.multiselect por checkboxes dinâmicos
+                st.markdown("2. Marque o(s) tipo(s) trocado(s):")
+                cols = st.columns(len(opcoes_tipo))
+                selecoes = {}
+                for i, opcao in enumerate(opcoes_tipo):
+                    selecoes[opcao] = cols[i].checkbox(opcao)
+
                 change_date = st.date_input("3. Data da Troca:", datetime.now())
                 
                 if st.form_submit_button("Registrar Troca"):
+                    
+                    # Lógica para coletar os resultados dos checkboxes
+                    tipos_a_registrar = [tipo for tipo, selecionado in selecoes.items() if selecionado]
+
                     if not tipos_a_registrar:
                         st.error("Por favor, selecione pelo menos um tipo de suprimento.")
                     else:
