@@ -39,10 +39,10 @@ def get_change_logs():
 
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
-    logo_url = "https://www.camaraourinhos.sp.gov.br/img/customizacao/cliente/facebook/imagem_compartilhamento_redes.jpg"
+    logo_url = "https://i.ibb.co/fVb8h4JN/Design-sem-nome.png"
     st.sidebar.image(logo_url, use_container_width=True)
 
-    if st.sidebar.button("Sair (Logout)"):
+    if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
         if 'deleting_sector_id' in st.session_state:
             del st.session_state['deleting_sector_id']
