@@ -53,7 +53,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA (CORRIGIDA) ---
+    # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -68,10 +68,13 @@ def run_app():
                 categorias = ["Cartucho Jato de Tinta", "Suprimento Laser"]
                 categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
 
-                # LINHA CORRIGIDA AQUI
+                # --- LINHA DE DEBUG ADICIONADA AQUI ---
+                st.write(f"DEBUG: O valor selecionado na categoria é: '{categoria_selecionada}'")
+                # ------------------------------------
+
                 if categoria_selecionada == "Cartucho Jato de Tinta":
                     opcoes_tipo = ["Preto", "Colorido"]
-                else:  # Suprimento Laser
+                else:
                     opcoes_tipo = ["Toner", "Cilindro"]
 
                 tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
