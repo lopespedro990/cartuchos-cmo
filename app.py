@@ -53,7 +53,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
 
-    # --- PÁGINA: REGISTRAR TROCA (MODIFICADA) ---
+    # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -62,7 +62,6 @@ def run_app():
         if not users:
             st.warning("Nenhum setor cadastrado.")
         else:
-            # MUDANÇA 1: Nome da categoria alterado na lista
             categorias = ["Cartucho de Tinta", "Suprimento Laser"]
             categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
 
@@ -72,11 +71,16 @@ def run_app():
                 opcoes_tipo = ["Toner", "Cilindro"]
 
             with st.form("registro_troca_form"):
-                # MUDANÇA 2: A linha st.info(...) foi removida daqui
-                
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                tipos_a_registrar = st.multiselect("Marque o(s) tipo(s) trocado(s):", opcoes_tipo)
-                change_date = st.date_input("Data da Troca:", datetime.now())
+                
+                # MUDANÇA AQUI: Adicionado o parâmetro 'placeholder'
+                tipos_a_registrar = st.multiselect(
+                    "2. Marque o(s) tipo(s) trocado(s):", 
+                    opcoes_tipo,
+                    placeholder="Selecione as opções"
+                )
+                
+                change_date = st.date_input("3. Data da Troca:", datetime.now())
                 
                 if st.form_submit_button("Registrar Troca"):
                     if not tipos_a_registrar:
