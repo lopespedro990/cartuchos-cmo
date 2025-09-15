@@ -44,8 +44,10 @@ def run_app():
 
     if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
-        if 'deleting_sector_id' in st.session_state:
-            del st.session_state['deleting_sector_id']
+        # Limpa todos os estados de sessão ao sair
+        for key in list(st.session_state.keys()):
+            if key != 'password_correct':
+                del st.session_state[key]
         st.rerun()
 
     st.title("🖨️ Gerenciador de Suprimentos de Impressão")
@@ -73,7 +75,6 @@ def run_app():
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
                 
-                # MUDANÇA AQUI: Adicionado o parâmetro 'placeholder'
                 tipos_a_registrar = st.multiselect(
                     "2. Marque o(s) tipo(s) trocado(s):", 
                     opcoes_tipo,
@@ -106,7 +107,7 @@ def run_app():
                         if erros: 
                             for erro in erros: st.error(erro)
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
+    # --- PÁGINA: DASHBOARD DE ANÁLISE (MODIFICADA) ---
     elif page == "Dashboard de Análise":
         st.header("Dashboard de Análise de Trocas")
         logs = get_change_logs()
@@ -170,10 +171,56 @@ def run_app():
                 fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
                 st.plotly_chart(fig_line, use_container_width=True)
                 
-                st.markdown("---")
-                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
-                st.subheader(titulo_historico)
-                st.dataframe(df_filtrado[['Data', 'Setor', 'Categoria', 'Tipo']].reset_index(drop=True), use_container_width=True)
+            st.markdown("---")
+            titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
+            st.subheader(titulo_historico)
+
+            # LÓGICA DE CONFIRMAÇÃO DE EXCLUSÃO DE REGISTRO
+            if 'deleting_log_id' not in st.session_state:
+                st.session_state.deleting_log_id = None
+
+            if st.session_state.deleting_log_id is not None:
+                # Encontra os detalhes do registro a ser excluído para mostrar na mensagem
+                log_details = df_filtrado[df_filtrado['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
+                
+                st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
+                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Tipo:** {log_details['Tipo']}")
+
+                col_confirm, col_cancel = st.columns(2)
+                if col_confirm.button("Sim, apagar registro", type="primary"):
+                    try:
+                        supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
+                        st.success("Registro apagado com sucesso!")
+                        st.session_state.deleting_log_id = None
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Ocorreu um erro ao apagar o registro: {e}")
+                
+                if col_cancel.button("Cancelar"):
+                    st.session_state.deleting_log_id = None
+                    st.rerun()
+
+            # CONSTRUÇÃO DA TABELA DE HISTÓRICO COM BOTÕES
+            # Cabeçalho da tabela
+            header_cols = st.columns([2, 3, 2, 2, 1])
+            header_cols[0].write("**Data**")
+            header_cols[1].write("**Setor**")
+            header_cols[2].write("**Categoria**")
+            header_cols[3].write("**Tipo**")
+            
+            # Linhas da tabela
+            for index, row in df_filtrado.iterrows():
+                with st.container(border=True):
+                    row_cols = st.columns([2, 3, 2, 2, 1])
+                    row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
+                    row_cols[1].text(row['Setor'])
+                    row_cols[2].text(row['Categoria'])
+                    row_cols[3].text(row['Tipo'])
+                    
+                    # Botão para iniciar o processo de exclusão
+                    if row_cols[4].button("Remover", key=f"del_log_{row['ID Troca']}"):
+                        st.session_state.deleting_log_id = row['ID Troca']
+                        st.rerun()
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
@@ -182,7 +229,7 @@ def run_app():
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
 
         if st.session_state.deleting_sector_id is not None:
-            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros de troca de cartucho. Esta ação é irreversível.")
+            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
                 password = st.text_input("Para confirmar, digite a senha de administrador:", type="password")
                 col_confirm, col_cancel = st.columns(2)
@@ -192,7 +239,7 @@ def run_app():
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('usuario_id', st.session_state.deleting_sector_id).execute()
                                 supabase.table('usuarios').delete().eq('id', st.session_state.deleting_sector_id).execute()
-                                st.success(f"O setor '{st.session_state.deleting_sector_name}' e todos os seus registros foram removidos com sucesso!")
+                                st.success(f"O setor '{st.session_state.deleting_sector_name}' e seus registros foram removidos com sucesso!")
                                 st.session_state.deleting_sector_id = None
                                 st.rerun()
                             except Exception as e:
