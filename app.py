@@ -44,6 +44,7 @@ def run_app():
 
     if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
+        # Limpa todos os estados de sessão ao sair para evitar bugs
         for key in list(st.session_state.keys()):
             if key != 'password_correct':
                 del st.session_state[key]
@@ -56,23 +57,30 @@ def run_app():
 
     # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
-        # (Esta página não foi alterada)
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
         user_names = {user['name']: user['id'] for user in users}
+
         if not users:
             st.warning("Nenhum setor cadastrado.")
         else:
             categorias = ["Cartucho de Tinta", "Suprimento Laser"]
             categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
+
             if categoria_selecionada == "Cartucho de Tinta":
                 opcoes_tipo = ["Preto", "Colorido"]
             else:
                 opcoes_tipo = ["Toner", "Cilindro"]
+
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
+                tipos_a_registrar = st.multiselect(
+                    "2. Marque o(s) tipo(s) trocado(s):", 
+                    opcoes_tipo,
+                    placeholder="Selecione as opções"
+                )
                 change_date = st.date_input("3. Data da Troca:", datetime.now())
+                
                 if st.form_submit_button("Registrar Troca"):
                     if not tipos_a_registrar:
                         st.error("Por favor, selecione pelo menos um tipo de suprimento.")
@@ -80,19 +88,34 @@ def run_app():
                         user_id = user_names[selected_user_name]
                         formatted_date = change_date.strftime("%Y-%m-%d")
                         sucessos, erros = 0, []
+                        
                         for tipo in tipos_a_registrar:
                             try:
-                                supabase.table('trocas_cartucho').insert({'usuario_id': user_id, 'data_troca': formatted_date, 'categoria': categoria_selecionada, 'tipo': tipo}).execute()
+                                supabase.table('trocas_cartucho').insert({
+                                    'usuario_id': user_id, 
+                                    'data_troca': formatted_date,
+                                    'categoria': categoria_selecionada,
+                                    'tipo': tipo
+                                }).execute()
                                 sucessos += 1
                             except Exception as e:
                                 erros.append(f"Falha ao registrar '{tipo}': {e}")
+
                         if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso para {selected_user_name}!")
                         if erros: 
                             for erro in erros: st.error(erro)
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE (MODIFICADA) ---
+    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
         st.header("Dashboard de Análise de Trocas")
+        
+        # Inicializa os estados de sessão para ordenação e exclusão
+        if 'sort_by' not in st.session_state:
+            st.session_state.sort_by = 'Data'
+            st.session_state.sort_ascending = False
+        if 'deleting_log_id' not in st.session_state:
+            st.session_state.deleting_log_id = None
+
         logs = get_change_logs()
         if not logs:
             st.info("Ainda não há registros de troca para exibir.")
@@ -107,16 +130,15 @@ def run_app():
                 })
             
             df = pd.DataFrame(processed_logs)
-            df['Data'] = pd.to_datetime(df['Data']).dt.date
-            df = df.sort_values(by='Data', ascending=False)
-
+            df['Data'] = pd.to_datetime(df['Data'])
+            
             st.sidebar.markdown("---")
             st.sidebar.header("Filtros do Dashboard")
             
             categorias_filtro = ["Todas"] + df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist()
             categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
             
-            df['AnoMês'] = pd.to_datetime(df['Data']).dt.strftime('%Y-%m')
+            df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
             lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
             mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
             
@@ -131,7 +153,6 @@ def run_app():
             if df_filtrado.empty:
                 st.warning("Nenhum registro encontrado para os filtros selecionados.")
             else:
-                # (Gráficos continuam aqui, sem alterações)
                 col1, col2 = st.columns(2)
                 with col1:
                     st.subheader("Total de Trocas por Setor")
@@ -156,42 +177,56 @@ def run_app():
             st.markdown("---")
             titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
             st.subheader(titulo_historico)
-            
-            # MUDANÇA: Substituímos o loop com botões pelo st.data_editor
-            df_display = df_filtrado[['ID Troca', 'Data', 'Setor', 'Categoria', 'Tipo']]
-            
-            if 'edited_df' not in st.session_state:
-                st.session_state.edited_df = df_display.copy()
 
-            # Oculta a coluna de ID para o usuário, mas a mantém para nossa lógica
-            edited_df = st.data_editor(
-                df_display,
-                hide_index=True,
-                column_config={"ID Troca": None}, # Oculta a coluna de ID
-                num_rows="dynamic", # Permite adicionar/remover linhas
-                key="data_editor"
-            )
-
-            # Detecta quais linhas foram removidas
-            ids_originais = set(df_display['ID Troca'])
-            ids_editados = set(edited_df['ID Troca'])
-            ids_removidos = list(ids_originais - ids_editados)
-
-            if ids_removidos:
-                st.warning(f"Você removeu {len(ids_removidos)} registro(s). Clique em 'Salvar' para confirmar a exclusão.")
-                if st.button("Salvar Alterações", type="primary"):
+            if st.session_state.deleting_log_id is not None:
+                log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
+                st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
+                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Tipo:** {log_details['Tipo']}")
+                col_confirm, col_cancel = st.columns(2)
+                if col_confirm.button("Sim, apagar registro", type="primary"):
                     try:
-                        erros = 0
-                        for log_id in ids_removidos:
-                            supabase.table('trocas_cartucho').delete().eq('id', log_id).execute()
-                        st.success("Registro(s) removido(s) com sucesso!")
+                        supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
+                        st.success("Registro apagado com sucesso!")
+                        st.session_state.deleting_log_id = None
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Ocorreu um erro ao remover os registros: {e}")
+                        st.error(f"Ocorreu um erro ao apagar o registro: {e}")
+                if col_cancel.button("Cancelar"):
+                    st.session_state.deleting_log_id = None
+                    st.rerun()
+            
+            def set_sort_order(column_name):
+                if st.session_state.sort_by == column_name:
+                    st.session_state.sort_ascending = not st.session_state.sort_ascending
+                else:
+                    st.session_state.sort_by = column_name
+                    st.session_state.sort_ascending = True # Padrão é ascendente no primeiro clique
+                st.session_state.deleting_log_id = None # Reseta o modo de deleção
+
+            df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
+
+            header_cols = st.columns([2, 3, 2, 2, 1])
+            if header_cols[0].button('Data'): set_sort_order('Data')
+            if header_cols[1].button('Setor'): set_sort_order('Setor')
+            if header_cols[2].button('Categoria'): set_sort_order('Categoria')
+            if header_cols[3].button('Tipo'): set_sort_order('Tipo')
+            header_cols[4].write("**Ação**")
+
+            st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
+
+            for index, row in df_sorted.iterrows():
+                row_cols = st.columns([2, 3, 2, 2, 1])
+                row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
+                row_cols[1].text(row['Setor'])
+                row_cols[2].text(row['Categoria'])
+                row_cols[3].text(row['Tipo'])
+                
+                if row_cols[4].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
+                    st.session_state.deleting_log_id = row['ID Troca']
+                    st.rerun()
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
-        # (Esta página não foi alterada)
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
