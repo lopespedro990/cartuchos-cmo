@@ -44,7 +44,6 @@ def run_app():
 
     if st.sidebar.button("Sair"):
         st.session_state['password_correct'] = False
-        # Limpa todos os estados de sessão ao sair
         for key in list(st.session_state.keys()):
             if key != 'password_correct':
                 del st.session_state[key]
@@ -57,32 +56,23 @@ def run_app():
 
     # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
+        # (Esta página não foi alterada)
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
         user_names = {user['name']: user['id'] for user in users}
-
         if not users:
             st.warning("Nenhum setor cadastrado.")
         else:
             categorias = ["Cartucho de Tinta", "Suprimento Laser"]
             categoria_selecionada = st.selectbox("1. Selecione a Categoria do Suprimento:", categorias)
-
             if categoria_selecionada == "Cartucho de Tinta":
                 opcoes_tipo = ["Preto", "Colorido"]
             else:
                 opcoes_tipo = ["Toner", "Cilindro"]
-
             with st.form("registro_troca_form"):
                 selected_user_name = st.selectbox("Selecione o Setor:", options=user_names.keys())
-                
-                tipos_a_registrar = st.multiselect(
-                    "2. Marque o(s) tipo(s) trocado(s):", 
-                    opcoes_tipo,
-                    placeholder="Selecione as opções"
-                )
-                
+                tipos_a_registrar = st.multiselect("2. Marque o(s) tipo(s) trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
                 change_date = st.date_input("3. Data da Troca:", datetime.now())
-                
                 if st.form_submit_button("Registrar Troca"):
                     if not tipos_a_registrar:
                         st.error("Por favor, selecione pelo menos um tipo de suprimento.")
@@ -90,19 +80,12 @@ def run_app():
                         user_id = user_names[selected_user_name]
                         formatted_date = change_date.strftime("%Y-%m-%d")
                         sucessos, erros = 0, []
-                        
                         for tipo in tipos_a_registrar:
                             try:
-                                supabase.table('trocas_cartucho').insert({
-                                    'usuario_id': user_id, 
-                                    'data_troca': formatted_date,
-                                    'categoria': categoria_selecionada,
-                                    'tipo': tipo
-                                }).execute()
+                                supabase.table('trocas_cartucho').insert({'usuario_id': user_id, 'data_troca': formatted_date, 'categoria': categoria_selecionada, 'tipo': tipo}).execute()
                                 sucessos += 1
                             except Exception as e:
                                 erros.append(f"Falha ao registrar '{tipo}': {e}")
-
                         if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso para {selected_user_name}!")
                         if erros: 
                             for erro in erros: st.error(erro)
@@ -124,7 +107,7 @@ def run_app():
                 })
             
             df = pd.DataFrame(processed_logs)
-            df['Data'] = pd.to_datetime(df['Data'])
+            df['Data'] = pd.to_datetime(df['Data']).dt.date
             df = df.sort_values(by='Data', ascending=False)
 
             st.sidebar.markdown("---")
@@ -133,11 +116,11 @@ def run_app():
             categorias_filtro = ["Todas"] + df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist()
             categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
             
-            df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+            df['AnoMês'] = pd.to_datetime(df['Data']).dt.strftime('%Y-%m')
             lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
             mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
             
-            df_filtrado = df
+            df_filtrado = df.copy()
             if categoria_filtrada != "Todas":
                 df_filtrado = df_filtrado[df_filtrado['Categoria'] == categoria_filtrada]
             if mes_selecionado != "Todos":
@@ -148,6 +131,7 @@ def run_app():
             if df_filtrado.empty:
                 st.warning("Nenhum registro encontrado para os filtros selecionados.")
             else:
+                # (Gráficos continuam aqui, sem alterações)
                 col1, col2 = st.columns(2)
                 with col1:
                     st.subheader("Total de Trocas por Setor")
@@ -156,7 +140,6 @@ def run_app():
                     titulo_grafico_bar = f"Setores que mais trocaram ({categoria_filtrada}, {mes_selecionado})"
                     fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
                     fig_bar.update_traces(textposition='outside'); st.plotly_chart(fig_bar, use_container_width=True)
-
                 with col2:
                     st.subheader("Proporção por Tipo de Suprimento")
                     type_counts = df_filtrado['Tipo'].value_counts().reset_index()
@@ -164,70 +147,54 @@ def run_app():
                     titulo_grafico_pie = f"Proporção ({categoria_filtrada}, {mes_selecionado})"
                     fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
                     st.plotly_chart(fig_pie, use_container_width=True)
-
                 st.subheader("Trocas ao Longo do Tempo")
                 monthly_changes = df_filtrado.groupby('AnoMês').size().reset_index(name='Quantidade')
                 titulo_grafico_linha = f"Volume de Trocas por Mês ({categoria_filtrada})"
                 fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
                 st.plotly_chart(fig_line, use_container_width=True)
-                
+            
             st.markdown("---")
             titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
             st.subheader(titulo_historico)
+            
+            # MUDANÇA: Substituímos o loop com botões pelo st.data_editor
+            df_display = df_filtrado[['ID Troca', 'Data', 'Setor', 'Categoria', 'Tipo']]
+            
+            if 'edited_df' not in st.session_state:
+                st.session_state.edited_df = df_display.copy()
 
-            # LÓGICA DE CONFIRMAÇÃO DE EXCLUSÃO DE REGISTRO
-            if 'deleting_log_id' not in st.session_state:
-                st.session_state.deleting_log_id = None
+            # Oculta a coluna de ID para o usuário, mas a mantém para nossa lógica
+            edited_df = st.data_editor(
+                df_display,
+                hide_index=True,
+                column_config={"ID Troca": None}, # Oculta a coluna de ID
+                num_rows="dynamic", # Permite adicionar/remover linhas
+                key="data_editor"
+            )
 
-            if st.session_state.deleting_log_id is not None:
-                # Encontra os detalhes do registro a ser excluído para mostrar na mensagem
-                log_details = df_filtrado[df_filtrado['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
-                
-                st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
-                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Tipo:** {log_details['Tipo']}")
+            # Detecta quais linhas foram removidas
+            ids_originais = set(df_display['ID Troca'])
+            ids_editados = set(edited_df['ID Troca'])
+            ids_removidos = list(ids_originais - ids_editados)
 
-                col_confirm, col_cancel = st.columns(2)
-                if col_confirm.button("Sim, apagar registro", type="primary"):
+            if ids_removidos:
+                st.warning(f"Você removeu {len(ids_removidos)} registro(s). Clique em 'Salvar' para confirmar a exclusão.")
+                if st.button("Salvar Alterações", type="primary"):
                     try:
-                        supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
-                        st.success("Registro apagado com sucesso!")
-                        st.session_state.deleting_log_id = None
+                        erros = 0
+                        for log_id in ids_removidos:
+                            supabase.table('trocas_cartucho').delete().eq('id', log_id).execute()
+                        st.success("Registro(s) removido(s) com sucesso!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Ocorreu um erro ao apagar o registro: {e}")
-                
-                if col_cancel.button("Cancelar"):
-                    st.session_state.deleting_log_id = None
-                    st.rerun()
-
-            # CONSTRUÇÃO DA TABELA DE HISTÓRICO COM BOTÕES
-            # Cabeçalho da tabela
-            header_cols = st.columns([2, 3, 2, 2, 1])
-            header_cols[0].write("**Data**")
-            header_cols[1].write("**Setor**")
-            header_cols[2].write("**Categoria**")
-            header_cols[3].write("**Tipo**")
-            
-            # Linhas da tabela
-            for index, row in df_filtrado.iterrows():
-                with st.container(border=True):
-                    row_cols = st.columns([2, 3, 2, 2, 1])
-                    row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
-                    row_cols[1].text(row['Setor'])
-                    row_cols[2].text(row['Categoria'])
-                    row_cols[3].text(row['Tipo'])
-                    
-                    # Botão para iniciar o processo de exclusão
-                    if row_cols[4].button("Remover", key=f"del_log_{row['ID Troca']}"):
-                        st.session_state.deleting_log_id = row['ID Troca']
-                        st.rerun()
+                        st.error(f"Ocorreu um erro ao remover os registros: {e}")
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
+        # (Esta página não foi alterada)
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
-
         if st.session_state.deleting_sector_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
