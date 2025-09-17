@@ -34,7 +34,6 @@ def get_users():
     return response.data
 
 def get_change_logs():
-    # ATUALIZADO: Busca também o modelo do equipamento associado
     response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo)').order('data_troca', desc=True).execute()
     return response.data
 
@@ -71,10 +70,23 @@ def run_app():
         else:
             user_map = {user['name']: user['id'] for user in users}
             
+            # PASSO 1: SELECIONAR O SETOR (FORA DO FORM)
             selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
 
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
+                
+                # PASSO 2: SELECIONAR A CATEGORIA (FORA DO FORM)
+                categorias = ["Cartucho de Tinta", "Suprimento Laser"]
+                categoria_selecionada = st.selectbox("2. Selecione a Categoria do Suprimento:", categorias)
+
+                # PASSO 3: LÓGICA PARA DEFINIR AS OPÇÕES
+                if categoria_selecionada == "Cartucho de Tinta":
+                    opcoes_tipo = ["Preto", "Colorido"]
+                else:
+                    opcoes_tipo = ["Toner", "Cilindro"]
+
+                # Busca equipamentos apenas do setor selecionado
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
                 
                 if not equipamentos_no_setor:
@@ -82,19 +94,11 @@ def run_app():
                 else:
                     equipamento_map = {eq['modelo']: eq['id'] for eq in equipamentos_no_setor}
 
+                    # PASSO 4: O FORM SÓ COM OS CAMPOS FINAIS
                     with st.form("registro_troca_form"):
-                        st.info(f"Registrando troca para o setor: **{selected_user_name}**")
+                        st.info(f"Registrando para: Setor **'{selected_user_name}'** | Categoria: **'{categoria_selecionada}'**")
                         
-                        selected_equipamento_modelo = st.selectbox("2. Selecione o Equipamento:", options=equipamento_map.keys())
-                        
-                        categorias = ["Cartucho de Tinta", "Suprimento Laser"]
-                        categoria_selecionada = st.selectbox("3. Selecione a Categoria do Suprimento:", categorias)
-
-                        if categoria_selecionada == "Cartucho de Tinta":
-                            opcoes_tipo = ["Preto", "Colorido"]
-                        else:
-                            opcoes_tipo = ["Toner", "Cilindro"]
-
+                        selected_equipamento_modelo = st.selectbox("3. Selecione o Equipamento:", options=equipamento_map.keys())
                         tipos_a_registrar = st.multiselect("4. Marque o(s) tipo(s) trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
                         change_date = st.date_input("5. Data da Troca:", datetime.now())
                         
@@ -117,7 +121,7 @@ def run_app():
                                         sucessos += 1
                                     except Exception as e:
                                         erros.append(f"Falha ao registrar '{tipo}': {e}")
-                                if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso para {selected_user_name}!")
+                                if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso!")
                                 if erros: 
                                     for erro in erros: st.error(erro)
 
@@ -312,7 +316,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- NOVA PÁGINA: GERENCIAR EQUIPAMENTOS ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
 
