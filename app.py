@@ -302,11 +302,10 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (MODIFICADA) ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
 
-        # Lógica para a tela de confirmação de exclusão (deve vir primeiro)
         if 'deleting_equip_id' not in st.session_state:
             st.session_state.deleting_equip_id = None
             st.session_state.deleting_equip_model = None
@@ -323,6 +322,7 @@ def run_app():
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('equipamento_id', st.session_state.deleting_equip_id).execute()
                                 supabase.table('equipamentos').delete().eq('id', st.session_state.deleting_equip_id).execute()
+                                
                                 st.success(f"O equipamento '{st.session_state.deleting_equip_model}' e seus registros foram removidos com sucesso!")
                                 st.session_state.deleting_equip_id = None
                                 st.rerun()
@@ -378,37 +378,38 @@ def run_app():
                 df_equipamentos = pd.DataFrame(processed_equipamentos)
                 st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
             
-            st.markdown("---")
-            st.subheader("Remover um Equipamento")
-            equipamentos_data_delete = get_equipamentos()
-            if not equipamentos_data_delete:
-                st.info("Nenhum equipamento para remover.")
-            else:
-                equipamento_map_delete = {f"{item['modelo']} ({item['usuarios']['name']})": {'id': item['id'], 'modelo': item['modelo']} for item in equipamentos_data_delete if item.get('usuarios')}
-                equipamento_selecionado_para_deletar = st.selectbox("Selecione um equipamento para remover:", options=equipamento_map_delete.keys())
-                
-                if st.button("Remover Equipamento Selecionado", type="primary"):
-                    if equipamento_selecionado_para_deletar:
-                        equip_info = equipamento_map_delete[equipamento_selecionado_para_deletar]
-                        equip_id_to_delete = equip_info['id']
-                        equip_model_to_delete = equip_info['modelo']
-                        
-                        response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id_to_delete).execute()
-                        
-                        if response.count > 0:
-                            # Ativa o modo de confirmação com senha
-                            st.session_state.deleting_equip_id = equip_id_to_delete
-                            st.session_state.deleting_equip_model = equipamento_selecionado_para_deletar
-                            st.session_state.deleting_equip_logs_count = response.count
-                            st.rerun()
-                        else:
-                            # Exclusão direta se não houver histórico
-                            try:
-                                supabase.table('equipamentos').delete().eq('id', equip_id_to_delete).execute()
-                                st.success(f"Equipamento '{equipamento_selecionado_para_deletar}' removido com sucesso!")
+            # MUDANÇA: Seção de remoção agora dentro de um expander
+            with st.expander("Remover um Equipamento"):
+                equipamentos_data_delete = get_equipamentos()
+                if not equipamentos_data_delete:
+                    st.info("Nenhum equipamento para remover.")
+                else:
+                    equipamento_map_delete = {f"{item['modelo']} ({item['usuarios']['name']})": {'id': item['id'], 'modelo': item['modelo']} for item in equipamentos_data_delete if item.get('usuarios')}
+                    equipamento_selecionado_para_deletar = st.selectbox(
+                        "Selecione um equipamento para remover:",
+                        options=equipamento_map_delete.keys()
+                    )
+                    
+                    if st.button("Remover Equipamento Selecionado", type="primary"):
+                        if equipamento_selecionado_para_deletar:
+                            equip_info = equipamento_map_delete[equipamento_selecionado_para_deletar]
+                            equip_id_to_delete = equip_info['id']
+                            equip_model_to_delete = equip_info['modelo']
+                            
+                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id_to_delete).execute()
+                            
+                            if response.count > 0:
+                                st.session_state.deleting_equip_id = equip_id_to_delete
+                                st.session_state.deleting_equip_model = equipamento_selecionado_para_deletar
+                                st.session_state.deleting_equip_logs_count = response.count
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
+                            else:
+                                try:
+                                    supabase.table('equipamentos').delete().eq('id', equip_id_to_delete).execute()
+                                    st.success(f"Equipamento '{equipamento_selecionado_para_deletar}' removido com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
