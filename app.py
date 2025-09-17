@@ -61,7 +61,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores", "Gerenciar Equipamentos"])
 
-    # --- PÁGINA: REGISTRAR TROCA (REORDENADA) ---
+    # --- PÁGINA: REGISTRAR TROCA (FINALMENTE CORRIGIDA) ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -70,61 +70,74 @@ def run_app():
         else:
             user_map = {user['name']: user['id'] for user in users}
             
-            # PASSO 1: Selecionar o Setor (FORA DO FORM)
-            selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
+            # PASSO 1: SELECIONAR O SETOR
+            selected_user_name = st.selectbox(
+                "1. Selecione o Setor:", 
+                options=user_map.keys(), 
+                index=None, 
+                placeholder="Escolha um setor..."
+            )
 
+            # SÓ PROSSEGUE SE UM SETOR FOI ESCOLHIDO
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
                 
                 if not equipamentos_no_setor:
-                    st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados. Vá para 'Gerenciar Equipamentos' para adicionar um.")
+                    st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados.")
                 else:
                     equipamento_map = {eq['modelo']: eq['id'] for eq in equipamentos_no_setor}
                     
-                    # PASSO 2: Selecionar a Categoria (FORA DO FORM)
-                    categorias = ["Cartucho de Tinta", "Suprimento Laser"]
-                    categoria_selecionada = st.selectbox("2. Selecione a Categoria do Suprimento:", categorias)
+                    # PASSO 2: SELECIONAR O EQUIPAMENTO
+                    selected_equipamento_modelo = st.selectbox(
+                        "2. Selecione o Equipamento:", 
+                        options=equipamento_map.keys(),
+                        index=None,
+                        placeholder="Escolha um equipamento..."
+                    )
 
-                    if categoria_selecionada == "Cartucho de Tinta":
-                        opcoes_tipo = ["Preto", "Colorido"]
-                    else:
-                        opcoes_tipo = ["Toner", "Cilindro"]
+                    # SÓ PROSSEGUE SE UM EQUIPAMENTO FOI ESCOLHIDO
+                    if selected_equipamento_modelo:
+                        selected_equipamento_id = equipamento_map[selected_equipamento_modelo]
 
-                    # PASSO 3: O FORM com os campos na nova ordem
-                    with st.form("registro_troca_form"):
-                        st.info(f"Registrando para: Setor **'{selected_user_name}'**")
+                        # PASSO 3: SELECIONAR A CATEGORIA
+                        categorias = ["Cartucho de Tinta", "Suprimento Laser"]
+                        categoria_selecionada = st.selectbox("3. Selecione a Categoria do Suprimento:", categorias)
+
+                        if categoria_selecionada == "Cartucho de Tinta":
+                            opcoes_tipo = ["Preto", "Colorido"]
+                        else:
+                            opcoes_tipo = ["Toner", "Cilindro"]
                         
-                        # MUDANÇA: Equipamento agora é o primeiro item do form
-                        selected_equipamento_modelo = st.selectbox("3. Selecione o Equipamento:", options=equipamento_map.keys())
-                        
-                        # MUDANÇA: Categoria e Tipo vêm depois
-                        tipos_a_registrar = st.multiselect(f"4. Marque o(s) tipo(s) de '{categoria_selecionada}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
-                        
-                        change_date = st.date_input("5. Data da Troca:", datetime.now())
-                        
-                        if st.form_submit_button("Registrar Troca"):
-                            if not tipos_a_registrar:
-                                st.error("Por favor, selecione pelo menos um tipo de suprimento.")
-                            else:
-                                selected_equipamento_id = equipamento_map[selected_equipamento_modelo]
-                                formatted_date = change_date.strftime("%Y-%m-%d")
-                                sucessos, erros = 0, []
-                                for tipo in tipos_a_registrar:
-                                    try:
-                                        supabase.table('trocas_cartucho').insert({
-                                            'usuario_id': selected_user_id, 
-                                            'equipamento_id': selected_equipamento_id,
-                                            'data_troca': formatted_date,
-                                            'categoria': categoria_selecionada,
-                                            'tipo': tipo
-                                        }).execute()
-                                        sucessos += 1
-                                    except Exception as e:
-                                        erros.append(f"Falha ao registrar '{tipo}': {e}")
-                                if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso!")
-                                if erros: 
-                                    for erro in erros: st.error(erro)
+                        st.markdown("---")
+                        # PASSO 4: FORMULÁRIO FINAL APENAS COM OS ÚLTIMOS ITENS
+                        with st.form("registro_troca_form"):
+                            st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}**")
+                            
+                            tipos_a_registrar = st.multiselect(f"4. Marque o(s) tipo(s) de '{categoria_selecionada}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
+                            change_date = st.date_input("5. Data da Troca:", datetime.now())
+                            
+                            if st.form_submit_button("Registrar Troca"):
+                                if not tipos_a_registrar:
+                                    st.error("Por favor, selecione pelo menos um tipo de suprimento.")
+                                else:
+                                    formatted_date = change_date.strftime("%Y-%m-%d")
+                                    sucessos, erros = 0, []
+                                    for tipo in tipos_a_registrar:
+                                        try:
+                                            supabase.table('trocas_cartucho').insert({
+                                                'usuario_id': selected_user_id, 
+                                                'equipamento_id': selected_equipamento_id,
+                                                'data_troca': formatted_date,
+                                                'categoria': categoria_selecionada,
+                                                'tipo': tipo
+                                            }).execute()
+                                            sucessos += 1
+                                        except Exception as e:
+                                            erros.append(f"Falha ao registrar '{tipo}': {e}")
+                                    if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso!")
+                                    if erros: 
+                                        for erro in erros: st.error(erro)
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
