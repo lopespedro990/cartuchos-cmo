@@ -69,20 +69,26 @@ def run_app():
             st.warning("Nenhum setor cadastrado.")
         else:
             user_map = {user['name']: user['id'] for user in users}
+            
             selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
+
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
+                
                 if not equipamentos_no_setor:
                     st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados.")
                 else:
                     equipamento_map = {eq['modelo']: {'id': eq['id'], 'categoria': eq['categoria']} for eq in equipamentos_no_setor}
+                    
                     selected_equipamento_modelo = st.selectbox("2. Selecione o Equipamento:", options=equipamento_map.keys(), index=None, placeholder="Escolha um equipamento...")
+
                     if selected_equipamento_modelo:
                         selected_equipamento_id = equipamento_map[selected_equipamento_modelo]['id']
                         categoria_do_equipamento = equipamento_map[selected_equipamento_modelo]['categoria']
+
                         if not categoria_do_equipamento:
-                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida.")
+                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida. Por favor, edite-o na página 'Gerenciar Equipamentos'.")
                         else:
                             if categoria_do_equipamento == "Cartucho de Tinta":
                                 opcoes_tipo = ["Preto", "Colorido"]
@@ -90,11 +96,14 @@ def run_app():
                                 opcoes_tipo = ["Toner", "Cilindro"]
                             else:
                                 opcoes_tipo = []
-                            st.markdown("---")
+
+                            # MUDANÇA AQUI: A linha st.markdown("---") foi removida
                             with st.form("registro_troca_form"):
                                 st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}** (Categoria: *{categoria_do_equipamento}*)")
+                                
                                 tipos_a_registrar = st.multiselect(f"3. Marque o(s) tipo(s) de '{categoria_do_equipamento}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
                                 change_date = st.date_input("4. Data da Troca:", datetime.now())
+                                
                                 if st.form_submit_button("Registrar Troca"):
                                     if not tipos_a_registrar:
                                         st.error("Por favor, selecione pelo menos um tipo de suprimento.")
@@ -322,7 +331,6 @@ def run_app():
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('equipamento_id', st.session_state.deleting_equip_id).execute()
                                 supabase.table('equipamentos').delete().eq('id', st.session_state.deleting_equip_id).execute()
-                                
                                 st.success(f"O equipamento '{st.session_state.deleting_equip_model}' e seus registros foram removidos com sucesso!")
                                 st.session_state.deleting_equip_id = None
                                 st.rerun()
@@ -378,7 +386,6 @@ def run_app():
                 df_equipamentos = pd.DataFrame(processed_equipamentos)
                 st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
             
-            # MUDANÇA: Seção de remoção agora dentro de um expander
             with st.expander("Remover um Equipamento"):
                 equipamentos_data_delete = get_equipamentos()
                 if not equipamentos_data_delete:
@@ -389,7 +396,6 @@ def run_app():
                         "Selecione um equipamento para remover:",
                         options=equipamento_map_delete.keys()
                     )
-                    
                     if st.button("Remover Equipamento Selecionado", type="primary"):
                         if equipamento_selecionado_para_deletar:
                             equip_info = equipamento_map_delete[equipamento_selecionado_para_deletar]
