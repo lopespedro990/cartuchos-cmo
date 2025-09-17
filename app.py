@@ -317,7 +317,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (CORRIGIDA) ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
 
@@ -330,17 +330,21 @@ def run_app():
                 
                 with st.form("novo_equipamento_form", clear_on_submit=True):
                     modelo_equipamento = st.text_input("Modelo do Equipamento (ex: HP LaserJet Pro M404n):")
+                    # CAMPO ADICIONADO PARA SELECIONAR A CATEGORIA
+                    categoria_equipamento = st.selectbox("Categoria do Suprimento:", ["Cartucho de Tinta", "Suprimento Laser"])
                     setor_selecionado = st.selectbox("Associar ao Setor:", options=setor_map.keys())
                     
                     if st.form_submit_button("Adicionar Equipamento"):
-                        if modelo_equipamento and setor_selecionado:
+                        if modelo_equipamento and setor_selecionado and categoria_equipamento:
                             setor_id = setor_map[setor_selecionado]
                             try:
+                                # DADO DA CATEGORIA AGORA É INSERIDO
                                 supabase.table('equipamentos').insert({
                                     'modelo': modelo_equipamento,
-                                    'setor_id': setor_id
+                                    'setor_id': setor_id,
+                                    'categoria': categoria_equipamento
                                 }).execute()
-                                st.success(f"Equipamento '{modelo_equipamento}' adicionado ao setor '{setor_selecionado}' com sucesso!")
+                                st.success(f"Equipamento '{modelo_equipamento}' adicionado com sucesso!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
@@ -358,6 +362,8 @@ def run_app():
             for item in equipamentos_data:
                 processed_equipamentos.append({
                     "Modelo do Equipamento": item['modelo'],
+                    # COLUNA ADICIONADA PARA MOSTRAR A CATEGORIA
+                    "Categoria": item.get('categoria', 'Não definida'),
                     "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "Setor não encontrado"
                 })
             
