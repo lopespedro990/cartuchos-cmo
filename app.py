@@ -61,7 +61,7 @@ def run_app():
 
     page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores", "Gerenciar Equipamentos"])
 
-    # --- PÁGINA: REGISTRAR TROCA (REESTRUTURADA) ---
+    # --- PÁGINA: REGISTRAR TROCA (REORDENADA) ---
     if page == "Registrar Troca":
         st.header("Registrar uma Nova Troca de Suprimento")
         users = get_users()
@@ -70,36 +70,37 @@ def run_app():
         else:
             user_map = {user['name']: user['id'] for user in users}
             
-            # PASSO 1: SELECIONAR O SETOR (FORA DO FORM)
+            # PASSO 1: Selecionar o Setor (FORA DO FORM)
             selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
 
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
-                
-                # PASSO 2: SELECIONAR A CATEGORIA (FORA DO FORM)
-                categorias = ["Cartucho de Tinta", "Suprimento Laser"]
-                categoria_selecionada = st.selectbox("2. Selecione a Categoria do Suprimento:", categorias)
-
-                # PASSO 3: LÓGICA PARA DEFINIR AS OPÇÕES
-                if categoria_selecionada == "Cartucho de Tinta":
-                    opcoes_tipo = ["Preto", "Colorido"]
-                else:
-                    opcoes_tipo = ["Toner", "Cilindro"]
-
-                # Busca equipamentos apenas do setor selecionado
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
                 
                 if not equipamentos_no_setor:
                     st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados. Vá para 'Gerenciar Equipamentos' para adicionar um.")
                 else:
                     equipamento_map = {eq['modelo']: eq['id'] for eq in equipamentos_no_setor}
+                    
+                    # PASSO 2: Selecionar a Categoria (FORA DO FORM)
+                    categorias = ["Cartucho de Tinta", "Suprimento Laser"]
+                    categoria_selecionada = st.selectbox("2. Selecione a Categoria do Suprimento:", categorias)
 
-                    # PASSO 4: O FORM SÓ COM OS CAMPOS FINAIS
+                    if categoria_selecionada == "Cartucho de Tinta":
+                        opcoes_tipo = ["Preto", "Colorido"]
+                    else:
+                        opcoes_tipo = ["Toner", "Cilindro"]
+
+                    # PASSO 3: O FORM com os campos na nova ordem
                     with st.form("registro_troca_form"):
-                        st.info(f"Registrando para: Setor **'{selected_user_name}'** | Categoria: **'{categoria_selecionada}'**")
+                        st.info(f"Registrando para: Setor **'{selected_user_name}'**")
                         
+                        # MUDANÇA: Equipamento agora é o primeiro item do form
                         selected_equipamento_modelo = st.selectbox("3. Selecione o Equipamento:", options=equipamento_map.keys())
-                        tipos_a_registrar = st.multiselect("4. Marque o(s) tipo(s) trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
+                        
+                        # MUDANÇA: Categoria e Tipo vêm depois
+                        tipos_a_registrar = st.multiselect(f"4. Marque o(s) tipo(s) de '{categoria_selecionada}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
+                        
                         change_date = st.date_input("5. Data da Troca:", datetime.now())
                         
                         if st.form_submit_button("Registrar Troca"):
