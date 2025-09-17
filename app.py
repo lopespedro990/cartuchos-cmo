@@ -69,26 +69,20 @@ def run_app():
             st.warning("Nenhum setor cadastrado.")
         else:
             user_map = {user['name']: user['id'] for user in users}
-            
             selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
-
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
-                
                 if not equipamentos_no_setor:
                     st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados.")
                 else:
                     equipamento_map = {eq['modelo']: {'id': eq['id'], 'categoria': eq['categoria']} for eq in equipamentos_no_setor}
-                    
                     selected_equipamento_modelo = st.selectbox("2. Selecione o Equipamento:", options=equipamento_map.keys(), index=None, placeholder="Escolha um equipamento...")
-
                     if selected_equipamento_modelo:
                         selected_equipamento_id = equipamento_map[selected_equipamento_modelo]['id']
                         categoria_do_equipamento = equipamento_map[selected_equipamento_modelo]['categoria']
-
                         if not categoria_do_equipamento:
-                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida. Por favor, edite-o na página 'Gerenciar Equipamentos'.")
+                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida.")
                         else:
                             if categoria_do_equipamento == "Cartucho de Tinta":
                                 opcoes_tipo = ["Preto", "Colorido"]
@@ -96,14 +90,11 @@ def run_app():
                                 opcoes_tipo = ["Toner", "Cilindro"]
                             else:
                                 opcoes_tipo = []
-
                             st.markdown("---")
                             with st.form("registro_troca_form"):
                                 st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}** (Categoria: *{categoria_do_equipamento}*)")
-                                
                                 tipos_a_registrar = st.multiselect(f"3. Marque o(s) tipo(s) de '{categoria_do_equipamento}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
                                 change_date = st.date_input("4. Data da Troca:", datetime.now())
-                                
                                 if st.form_submit_button("Registrar Troca"):
                                     if not tipos_a_registrar:
                                         st.error("Por favor, selecione pelo menos um tipo de suprimento.")
@@ -112,13 +103,7 @@ def run_app():
                                         sucessos, erros = 0, []
                                         for tipo in tipos_a_registrar:
                                             try:
-                                                # CORREÇÃO AQUI: A linha 'categoria' foi REMOVIDA
-                                                supabase.table('trocas_cartucho').insert({
-                                                    'usuario_id': selected_user_id, 
-                                                    'equipamento_id': selected_equipamento_id,
-                                                    'data_troca': formatted_date,
-                                                    'tipo': tipo
-                                                }).execute()
+                                                supabase.table('trocas_cartucho').insert({'usuario_id': selected_user_id, 'equipamento_id': selected_equipamento_id, 'data_troca': formatted_date, 'tipo': tipo}).execute()
                                                 sucessos += 1
                                             except Exception as e:
                                                 erros.append(f"Falha ao registrar '{tipo}': {e}")
@@ -320,69 +305,96 @@ def run_app():
     # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
-        with st.expander("Adicionar Novo Equipamento"):
-            users_data = get_users()
-            if not users_data:
-                st.warning("Você precisa cadastrar um setor antes de poder adicionar um equipamento.")
-            else:
-                setor_map = {user['name']: user['id'] for user in users_data}
-                with st.form("novo_equipamento_form", clear_on_submit=True):
-                    modelo_equipamento = st.text_input("Modelo do Equipamento (ex: HP LaserJet Pro M404n):")
-                    categoria_equipamento = st.selectbox("Categoria do Suprimento:", ["Cartucho de Tinta", "Suprimento Laser"])
-                    setor_selecionado = st.selectbox("Associar ao Setor:", options=setor_map.keys())
-                    if st.form_submit_button("Adicionar Equipamento"):
-                        if modelo_equipamento and setor_selecionado and categoria_equipamento:
-                            setor_id = setor_map[setor_selecionado]
+
+        if 'deleting_equip_id' not in st.session_state:
+            st.session_state.deleting_equip_id = None
+            st.session_state.deleting_equip_model = None
+            st.session_state.deleting_equip_logs_count = 0
+        
+        if st.session_state.deleting_equip_id is not None:
+            st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o equipamento **'{st.session_state.deleting_equip_model}'** e todos os seus **{st.session_state.deleting_equip_logs_count}** registros de troca. Esta ação é irreversível.")
+            with st.form("confirm_delete_equip_form"):
+                password = st.text_input("Para confirmar, digite a senha de exclusão:", type="password")
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.form_submit_button("Confirmar Exclusão Permanente", type="primary"):
+                        if password == st.secrets["auth"].get("delete_password", st.secrets["auth"]["password"]):
                             try:
-                                supabase.table('equipamentos').insert({
-                                    'modelo': modelo_equipamento,
-                                    'setor_id': setor_id,
-                                    'categoria': categoria_equipamento
-                                }).execute()
-                                st.success(f"Equipamento '{modelo_equipamento}' adicionado com sucesso!")
+                                supabase.table('trocas_cartucho').delete().eq('equipamento_id', st.session_state.deleting_equip_id).execute()
+                                supabase.table('equipamentos').delete().eq('id', st.session_state.deleting_equip_id).execute()
+                                
+                                st.success(f"O equipamento '{st.session_state.deleting_equip_model}' e seus registros foram removidos com sucesso!")
+                                st.session_state.deleting_equip_id = None
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
+                                st.error(f"Ocorreu um erro durante a exclusão: {e}")
                         else:
-                            st.error("Por favor, preencha todos os campos.")
-        st.markdown("---")
-        st.subheader("Lista de Equipamentos Cadastrados")
-        equipamentos_data = get_equipamentos()
-        if not equipamentos_data:
-            st.info("Nenhum equipamento cadastrado.")
-        else:
-            processed_equipamentos = []
-            for item in equipamentos_data:
-                processed_equipamentos.append({
-                    "Modelo": item['modelo'],
-                    "Categoria": item.get('categoria', 'Não definida'),
-                    "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "N/A"
-                })
-            df_equipamentos = pd.DataFrame(processed_equipamentos)
-            st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
+                            st.error("Senha de exclusão incorreta.")
+                with col_cancel:
+                    if st.form_submit_button("Cancelar"):
+                        st.session_state.deleting_equip_id = None
+                        st.rerun()
         
-        st.markdown("---")
-        st.subheader("Remover um Equipamento")
-        equipamentos_data_delete = get_equipamentos()
-        if not equipamentos_data_delete:
-            st.info("Nenhum equipamento para remover.")
         else:
-            equipamento_map_delete = {f"{item['modelo']} ({item['usuarios']['name']})": item['id'] for item in equipamentos_data_delete if item.get('usuarios')}
-            equipamento_selecionado_para_deletar = st.selectbox("Selecione um equipamento para remover:", options=equipamento_map_delete.keys())
-            if st.button("Remover Equipamento Selecionado", type="primary"):
-                if equipamento_selecionado_para_deletar:
-                    equip_id_to_delete = equipamento_map_delete[equipamento_selecionado_para_deletar]
-                    response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id_to_delete).execute()
-                    if response.count > 0:
-                        st.error(f"O equipamento '{equipamento_selecionado_para_deletar}' não pode ser removido, pois possui {response.count} registro(s) de troca no histórico.")
-                        st.warning("Para remover este equipamento, você precisa primeiro apagar seu histórico de trocas na página do Dashboard.")
-                    else:
-                        try:
-                            supabase.table('equipamentos').delete().eq('id', equip_id_to_delete).execute()
-                            st.success(f"Equipamento '{equipamento_selecionado_para_deletar}' removido com sucesso!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
+            with st.expander("Adicionar Novo Equipamento"):
+                users_data = get_users()
+                if not users_data:
+                    st.warning("Você precisa cadastrar um setor antes de poder adicionar um equipamento.")
+                else:
+                    setor_map = {user['name']: user['id'] for user in users_data}
+                    with st.form("novo_equipamento_form", clear_on_submit=True):
+                        modelo_equipamento = st.text_input("Modelo do Equipamento (ex: HP LaserJet Pro M404n):")
+                        categoria_equipamento = st.selectbox("Categoria do Suprimento:", ["Cartucho de Tinta", "Suprimento Laser"])
+                        setor_selecionado = st.selectbox("Associar ao Setor:", options=setor_map.keys())
+                        if st.form_submit_button("Adicionar Equipamento"):
+                            if modelo_equipamento and setor_selecionado and categoria_equipamento:
+                                setor_id = setor_map[setor_selecionado]
+                                try:
+                                    supabase.table('equipamentos').insert({
+                                        'modelo': modelo_equipamento,
+                                        'setor_id': setor_id,
+                                        'categoria': categoria_equipamento
+                                    }).execute()
+                                    st.success(f"Equipamento '{modelo_equipamento}' adicionado com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
+                            else:
+                                st.error("Por favor, preencha todos os campos.")
+            
+            st.markdown("---")
+            st.subheader("Lista de Equipamentos Cadastrados")
+            equipamentos_data = get_equipamentos()
+            if not equipamentos_data:
+                st.info("Nenhum equipamento cadastrado.")
+            else:
+                for item in equipamentos_data:
+                    with st.container(border=True):
+                        equip_id = item['id']
+                        equip_model = item['modelo']
+                        equip_category = item.get('categoria', 'N/A')
+                        sector_name = item['usuarios']['name'] if item.get('usuarios') else "N/A"
+                        
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        col1.text(equip_model)
+                        col2.text(equip_category)
+                        col3.text(sector_name)
+                        
+                        if col4.button("🗑️", key=f"del_equip_{equip_id}", help="Remover este equipamento"):
+                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id).execute()
+                            if response.count > 0:
+                                st.session_state.deleting_equip_id = equip_id
+                                st.session_state.deleting_equip_model = equip_model
+                                st.session_state.deleting_equip_logs_count = response.count
+                                st.rerun()
+                            else:
+                                try:
+                                    supabase.table('equipamentos').delete().eq('id', equip_id).execute()
+                                    st.success(f"Equipamento '{equip_model}' removido com sucesso!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Ocorreu um erro ao remover '{equip_model}': {e}")
+
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
