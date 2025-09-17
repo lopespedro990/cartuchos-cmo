@@ -77,7 +77,7 @@ def run_app():
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
                 
                 if not equipamentos_no_setor:
-                    st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados. Vá para 'Gerenciar Equipamentos' para adicionar um.")
+                    st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados.")
                 else:
                     equipamento_map = {eq['modelo']: {'id': eq['id'], 'categoria': eq['categoria']} for eq in equipamentos_no_setor}
                     
@@ -112,11 +112,11 @@ def run_app():
                                         sucessos, erros = 0, []
                                         for tipo in tipos_a_registrar:
                                             try:
+                                                # CORREÇÃO AQUI: A linha 'categoria' foi removida da inserção
                                                 supabase.table('trocas_cartucho').insert({
                                                     'usuario_id': selected_user_id, 
                                                     'equipamento_id': selected_equipamento_id,
                                                     'data_troca': formatted_date,
-                                                    'categoria': categoria_do_equipamento,
                                                     'tipo': tipo
                                                 }).execute()
                                                 sucessos += 1
@@ -146,7 +146,7 @@ def run_app():
                     'ID Troca': log['id'], 'Data': log['data_troca'],
                     'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
                     'Equipamento': log.get('equipamentos', {}).get('modelo', 'Não especificado'),
-                    'Categoria': log.get('categoria', 'Não definida'),
+                    'Categoria': log.get('equipamentos', {}).get('categoria', 'Não definida'), # Busca a categoria do equipamento
                     'Tipo': log.get('tipo', 'Não definido')
                 })
             
@@ -317,28 +317,23 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (CORRIGIDA) ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
-
         with st.expander("Adicionar Novo Equipamento"):
             users_data = get_users()
             if not users_data:
                 st.warning("Você precisa cadastrar um setor antes de poder adicionar um equipamento.")
             else:
                 setor_map = {user['name']: user['id'] for user in users_data}
-                
                 with st.form("novo_equipamento_form", clear_on_submit=True):
                     modelo_equipamento = st.text_input("Modelo do Equipamento (ex: HP LaserJet Pro M404n):")
-                    # CAMPO ADICIONADO PARA SELECIONAR A CATEGORIA
                     categoria_equipamento = st.selectbox("Categoria do Suprimento:", ["Cartucho de Tinta", "Suprimento Laser"])
                     setor_selecionado = st.selectbox("Associar ao Setor:", options=setor_map.keys())
-                    
                     if st.form_submit_button("Adicionar Equipamento"):
                         if modelo_equipamento and setor_selecionado and categoria_equipamento:
                             setor_id = setor_map[setor_selecionado]
                             try:
-                                # DADO DA CATEGORIA AGORA É INSERIDO
                                 supabase.table('equipamentos').insert({
                                     'modelo': modelo_equipamento,
                                     'setor_id': setor_id,
@@ -350,10 +345,8 @@ def run_app():
                                 st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
                         else:
                             st.error("Por favor, preencha todos os campos.")
-        
         st.markdown("---")
         st.subheader("Lista de Equipamentos Cadastrados")
-
         equipamentos_data = get_equipamentos()
         if not equipamentos_data:
             st.info("Nenhum equipamento cadastrado.")
@@ -361,15 +354,12 @@ def run_app():
             processed_equipamentos = []
             for item in equipamentos_data:
                 processed_equipamentos.append({
-                    "Modelo do Equipamento": item['modelo'],
-                    # COLUNA ADICIONADA PARA MOSTRAR A CATEGORIA
+                    "Modelo": item['modelo'],
                     "Categoria": item.get('categoria', 'Não definida'),
-                    "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "Setor não encontrado"
+                    "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "N/A"
                 })
-            
             df_equipamentos = pd.DataFrame(processed_equipamentos)
             st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
-
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
