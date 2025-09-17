@@ -37,6 +37,12 @@ def get_change_logs():
     response = supabase.table('trocas_cartucho').select('*, usuarios(name)').order('data_troca', desc=True).execute()
     return response.data
 
+# NOVA FUNÇÃO PARA BUSCAR EQUIPAMENTOS
+def get_equipamentos():
+    # Seleciona todas as colunas de 'equipamentos' e o nome do setor da tabela 'usuarios'
+    response = supabase.table('equipamentos').select('id, modelo, usuarios(name)').order('modelo').execute()
+    return response.data
+
 # --- APLICAÇÃO PRINCIPAL ---
 def run_app():
     logo_url = "https://www.camaraourinhos.sp.gov.br/img/customizacao/cliente/facebook/imagem_compartilhamento_redes.jpg"
@@ -52,7 +58,8 @@ def run_app():
     st.title("🖨️ Gerenciador de Suprimentos de Impressão")
     st.markdown("---")
 
-    page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores"])
+    # MENU DE NAVEGAÇÃO ATUALIZADO
+    page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores", "Gerenciar Equipamentos"])
 
     # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
@@ -104,7 +111,7 @@ def run_app():
                         if erros: 
                             for erro in erros: st.error(erro)
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE (MODIFICADA) ---
+    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
         st.header("Dashboard de Análise de Trocas")
         
@@ -182,14 +189,12 @@ def run_app():
                 st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
                 st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Tipo:** {log_details['Tipo']}")
 
-                # MUDANÇA: Adicionado st.form para pedir senha
                 with st.form("confirm_delete_log_form"):
                     password = st.text_input("Para confirmar, digite a senha de exclusão:", type="password")
                     
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:
                         if st.form_submit_button("Sim, apagar registro", type="primary"):
-                            # Verifica a senha de exclusão
                             if password == st.secrets["auth"]["delete_password"]:
                                 try:
                                     supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
@@ -248,7 +253,6 @@ def run_app():
                 col_confirm, col_cancel = st.columns(2)
                 with col_confirm:
                     if st.form_submit_button("Confirmar Exclusão Permanente", type="primary"):
-                        # Verifica a senha de exclusão
                         if password == st.secrets["auth"]["delete_password"]:
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('usuario_id', st.session_state.deleting_sector_id).execute()
@@ -299,6 +303,59 @@ def run_app():
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+    
+    # --- NOVA PÁGINA: GERENCIAR EQUIPAMENTOS ---
+    elif page == "Gerenciar Equipamentos":
+        st.header("Gerenciar Equipamentos")
+
+        with st.expander("Adicionar Novo Equipamento"):
+            # Busca os setores para popular o menu dropdown
+            users_data = get_users()
+            if not users_data:
+                st.warning("Você precisa cadastrar um setor antes de poder adicionar um equipamento.")
+            else:
+                # Cria um mapa de nome do setor para ID
+                setor_map = {user['name']: user['id'] for user in users_data}
+                
+                with st.form("novo_equipamento_form", clear_on_submit=True):
+                    modelo_equipamento = st.text_input("Modelo do Equipamento (ex: HP LaserJet Pro M404n):")
+                    setor_selecionado = st.selectbox("Associar ao Setor:", options=setor_map.keys())
+                    
+                    if st.form_submit_button("Adicionar Equipamento"):
+                        if modelo_equipamento and setor_selecionado:
+                            setor_id = setor_map[setor_selecionado]
+                            try:
+                                # Insere o novo equipamento na tabela 'equipamentos'
+                                supabase.table('equipamentos').insert({
+                                    'modelo': modelo_equipamento,
+                                    'setor_id': setor_id
+                                }).execute()
+                                st.success(f"Equipamento '{modelo_equipamento}' adicionado ao setor '{setor_selecionado}' com sucesso!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
+                        else:
+                            st.error("Por favor, preencha todos os campos.")
+        
+        st.markdown("---")
+        st.subheader("Lista de Equipamentos Cadastrados")
+
+        equipamentos_data = get_equipamentos()
+        if not equipamentos_data:
+            st.info("Nenhum equipamento cadastrado.")
+        else:
+            # Processa os dados para exibição na tabela
+            processed_equipamentos = []
+            for item in equipamentos_data:
+                processed_equipamentos.append({
+                    "Modelo do Equipamento": item['modelo'],
+                    "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "Setor não encontrado"
+                })
+            
+            df_equipamentos = pd.DataFrame(processed_equipamentos)
+            # st.dataframe exibe a tabela de forma limpa e organizada
+            st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
+
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
