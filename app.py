@@ -34,8 +34,7 @@ def get_users():
     return response.data
 
 def get_change_logs():
-    # CORRIGIDO: Removido 'custo' da busca
-    response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo, categoria), suprimentos(modelo, categoria, tipo)').order('data_troca', desc=True).execute()
+    response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo), suprimentos(modelo, categoria, tipo)').order('data_troca', desc=True).execute()
     return response.data
 
 def get_equipamentos(setor_id=None):
@@ -98,12 +97,14 @@ def run_app():
                         if not suprimentos_disponiveis:
                             st.warning(f"Nenhum suprimento da categoria '{categoria_do_equipamento}' cadastrado. Vá para 'Gerenciar Suprimentos' para adicionar.")
                         else:
-                            suprimento_map = {sup['modelo']: sup['id'] for sup in suprimentos_disponiveis}
+                            # MUDANÇA CRUCIAL AQUI: Cria um nome de exibição combinando Modelo e Tipo
+                            suprimento_map = {f"{sup['modelo']} ({sup['tipo']})": sup['id'] for sup in suprimentos_disponiveis}
 
                             st.markdown("---")
                             with st.form("registro_troca_form"):
                                 st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}**")
                                 
+                                # O menu agora mostrará o nome completo e descritivo
                                 suprimento_selecionado_modelo = st.selectbox("3. Selecione o Suprimento Trocado:", options=suprimento_map.keys())
                                 change_date = st.date_input("4. Data da Troca:", datetime.now())
                                 
@@ -420,15 +421,13 @@ def run_app():
                 else:
                     tipo = st.selectbox("Tipo", ["Toner", "Cilindro"])
 
-                # CAMPO DE CUSTO REMOVIDO DAQUI
                 if st.form_submit_button("Adicionar Suprimento"):
                     if modelo and categoria and tipo:
                         try:
-                            # INSERÇÃO SEM O CUSTO
                             supabase.table('suprimentos').insert({
                                 'modelo': modelo,
                                 'categoria': categoria,
-                                'tipo': tipo
+                                'tipo': tipo,
                             }).execute()
                             st.success(f"Suprimento '{modelo}' adicionado ao catálogo!")
                             st.rerun()
@@ -444,7 +443,6 @@ def run_app():
         if not suprimentos_data:
             st.info("Nenhum suprimento cadastrado.")
         else:
-            # Removido 'custo' da lista de colunas a serem exibidas
             df_suprimentos = pd.DataFrame(suprimentos_data).drop(columns=['created_at', 'id'])
             st.dataframe(df_suprimentos, use_container_width=True, hide_index=True)
 
