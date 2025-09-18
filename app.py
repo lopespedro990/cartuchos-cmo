@@ -466,65 +466,65 @@ def run_app():
 # --- PÁGINA: GERENCIAR SUPRIMENTOS ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
-
         with st.expander("Adicionar Novo Suprimento ao Catálogo"):
-            with st.form("novo_suprimento_form", clear_on_submit=True):
-                st.write("Preencha os detalhes do novo modelo de suprimento.")
-                
-                modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)")
+            st.write("Preencha os detalhes do novo modelo de suprimento.")
+           
+            modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)", key='new_suprimento_modelo')
+            # --- MUDANÇA #1: Definir as opções em variáveis ---
+            # Isso evita qualquer erro de digitação ou caractere oculto.
+            OPCAO_TINTA = "Cartucho de Tinta"
+            OPCAO_LASER = "Suprimento Laser"
+           
+            categoria = st.selectbox(
+                "Categoria",
+                [OPCAO_TINTA, OPCAO_LASER],
+                key='new_suprimento_categoria'
+            )
+            # --- MUDANÇA #2: Linha de Debug ---
+            # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
+            # Coloquei entre colchetes para vermos se há espaços em branco.
+            st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
+            tipo = None # Inicializa a variável tipo
+           
+            # --- MUDANÇA #3: Lógica Reforçada ---
+            # Usamos as variáveis para a comparação e adicionamos chaves únicas
+            # para garantir que o Streamlit não confunda os campos.
+            if categoria == OPCAO_TINTA:
+                tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='new_suprimento_tipo_tinta')
+           
+            elif categoria == OPCAO_LASER:
+                tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='new_suprimento_tipo_laser')
 
-                # --- MUDANÇA #1: Definir as opções em variáveis ---
-                # Isso evita qualquer erro de digitação ou caractere oculto.
-                OPCAO_TINTA = "Cartucho de Tinta"
-                OPCAO_LASER = "Suprimento Laser"
-                
-                categoria = st.selectbox(
-                    "Categoria",
-                    [OPCAO_TINTA, OPCAO_LASER],
-                    key='categoria_suprimento' # Adicionando uma chave única
-                )
-
-                # --- MUDANÇA #2: Linha de Debug ---
-                # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
-                # Coloquei entre colchetes para vermos se há espaços em branco.
-                st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
-
-                tipo = None # Inicializa a variável tipo
-                
-                # --- MUDANÇA #3: Lógica Reforçada ---
-                # Usamos as variáveis para a comparação e adicionamos chaves únicas
-                # para garantir que o Streamlit não confunda os campos.
-                if categoria == OPCAO_TINTA:
-                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='tipo_tinta')
-                
-                elif categoria == OPCAO_LASER:
-                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='tipo_laser')
-
-                if st.form_submit_button("Adicionar Suprimento"):
-                    if modelo and categoria and tipo:
-                        try:
-                            supabase.table('suprimentos').insert({
-                                'modelo': modelo,
-                                'categoria': categoria,
-                                'tipo': tipo
-                            }).execute()
-                            st.success(f"Suprimento '{modelo}' adicionado ao catálogo!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Ocorreu um erro: {e}")
-                    else:
-                        st.error("Por favor, preencha todos os campos.")
-
+            if st.button("Adicionar Suprimento"):  # Substitui o form_submit_button
+                if modelo and categoria and tipo:
+                    try:
+                        supabase.table('suprimentos').insert({
+                            'modelo': modelo,
+                            'categoria': categoria,
+                            'tipo': tipo
+                        }).execute()
+                        st.success(f"Suprimento '{modelo}' adicionado ao catálogo!")
+                        # Limpa os campos (simula clear_on_submit)
+                        st.session_state['new_suprimento_modelo'] = ''
+                        st.session_state['new_suprimento_categoria'] = OPCAO_TINTA  # Ou None, se preferir resetar para vazio
+                        if 'new_suprimento_tipo_tinta' in st.session_state:
+                            del st.session_state['new_suprimento_tipo_tinta']
+                        if 'new_suprimento_tipo_laser' in st.session_state:
+                            del st.session_state['new_suprimento_tipo_laser']
+                        st.rerun()  # Força rerun para atualizar a UI
+                    except Exception as e:
+                        st.error(f"Ocorreu um erro: {e}")
+                else:
+                    st.error("Por favor, preencha todos os campos.")
         st.markdown("---")
         st.subheader("Catálogo de Suprimentos Cadastrados")
-        
+       
         suprimentos_data = get_suprimentos()
         if not suprimentos_data:
             st.info("Nenhum suprimento cadastrado.")
         else:
             df_suprimentos = pd.DataFrame(suprimentos_data).drop(columns=['created_at', 'id'])
             st.dataframe(df_suprimentos, use_container_width=True, hide_index=True)
-
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
