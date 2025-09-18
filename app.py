@@ -198,8 +198,30 @@ def run_app():
                 st.plotly_chart(fig_line, use_container_width=True)
             
             st.markdown("---")
-            titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
-            st.subheader(titulo_historico)
+
+            col_titulo, col_download = st.columns([3, 1])
+            with col_titulo:
+                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
+                st.subheader(titulo_historico)
+            
+            with col_download:
+                @st.cache_data
+                def convert_df_to_csv(df_to_convert):
+                    return df_to_convert.to_csv(index=False).encode('utf-8')
+
+                # Prepara o DataFrame para exportação, selecionando e renomeando colunas
+                df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo']].copy()
+                df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
+                
+                csv = convert_df_to_csv(df_export)
+                
+                st.download_button(
+                    label="📥 Exportar para CSV",
+                    data=csv,
+                    file_name=f'historico_trocas_{mes_selecionado}_{categoria_filtrada}.csv',
+                    mime='text/csv',
+                )
+
 
             if st.session_state.deleting_log_id is not None:
                 log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
@@ -397,7 +419,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
                                     
-    # --- PÁGINA: GERENCIAR SUPRIMENTOS ---
+    # --- NOVA PÁGINA: GERENCIAR SUPRIMENTOS ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
 
