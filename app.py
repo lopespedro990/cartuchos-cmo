@@ -34,7 +34,6 @@ def get_users():
     return response.data
 
 def get_change_logs():
-    # O select com '*' já busca a nova coluna 'observacao' automaticamente
     response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo), suprimentos(modelo, categoria, tipo)').order('data_troca', desc=True).execute()
     return response.data
 
@@ -110,7 +109,6 @@ def run_app():
                                     suprimento_selecionado_modelo = st.selectbox("3. Selecione o Suprimento Trocado:", options=suprimento_map.keys())
                                     change_date = st.date_input("4. Data da Troca:", datetime.now())
                                     
-                                    # NOVO CAMPO DE OBSERVAÇÃO
                                     observacao = st.text_area("5. Observações (opcional):", placeholder="Ex: Cartucho antigo falhando, manchando a página, etc.")
                                     
                                     if st.form_submit_button("Registrar Troca"):
@@ -120,7 +118,6 @@ def run_app():
                                             suprimento_id = suprimento_map[suprimento_selecionado_modelo]
                                             formatted_date = change_date.strftime("%Y-%m-%d")
                                             try:
-                                                # ADICIONADO 'observacao' AO INSERT
                                                 supabase.table('trocas_cartucho').insert({
                                                     'usuario_id': selected_user_id, 
                                                     'equipamento_id': selected_equipamento_id,
@@ -156,7 +153,7 @@ def run_app():
                     'Suprimento': log.get('suprimentos', {}).get('modelo', 'Não especificado'),
                     'Categoria': log.get('suprimentos', {}).get('categoria', 'Não definida'),
                     'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido'),
-                    'Observação': log.get('observacao', '') # ADICIONADO PARA PROCESSAR OS LOGS
+                    'Observação': log.get('observacao', '')
                 })
             
             df = pd.DataFrame(processed_logs)
@@ -216,7 +213,6 @@ def run_app():
                 def convert_df_to_csv(df_to_convert):
                     return df_to_convert.to_csv(index=False).encode('utf-8')
 
-                # ADICIONADO 'Observação' AO ARQUIVO DE EXPORTAÇÃO
                 df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo', 'Observação']].copy()
                 df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
                 
@@ -263,34 +259,46 @@ def run_app():
 
             df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
 
-            # LAYOUT DAS COLUNAS ATUALIZADO PARA INCLUIR 'OBSERVAÇÃO'
-            header_cols = st.columns([2, 2, 3, 3, 2, 2, 3, 1])
+            # --- MUDANÇA #1: Layout do cabeçalho do histórico ---
+            # Removido o botão de ordenar observação e ajustado o espaçamento
+            header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
             if header_cols[0].button('Data'): set_sort_order('Data')
             if header_cols[1].button('Setor'): set_sort_order('Setor')
             if header_cols[2].button('Equipamento'): set_sort_order('Equipamento')
             if header_cols[3].button('Suprimento'): set_sort_order('Suprimento')
             if header_cols[4].button('Categoria'): set_sort_order('Categoria')
             if header_cols[5].button('Tipo'): set_sort_order('Tipo')
-            if header_cols[6].button('Observação'): set_sort_order('Observação')
+            header_cols[6].write("**OBS**")
             header_cols[7].write("**Ação**")
 
             st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
 
             for index, row in df_sorted.iterrows():
-                # LAYOUT DAS LINHAS ATUALIZADO
-                row_cols = st.columns([2, 2, 3, 3, 2, 2, 3, 1])
+                # --- MUDANÇA #2: Layout das linhas do histórico ---
+                row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
                 row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
                 row_cols[1].text(row['Setor'])
                 row_cols[2].text(row['Equipamento'])
                 row_cols[3].text(row['Suprimento'])
                 row_cols[4].text(row['Categoria'])
                 row_cols[5].text(row['Tipo'])
-                row_cols[6].text(row['Observação'])
+
+                # --- MUDANÇA #3: Lógica do popover de observação ---
+                # Verifica se a observação não está vazia para mostrar o botão
+                obs_text = row['Observação']
+                if pd.notna(obs_text) and obs_text.strip():
+                    with row_cols[6].popover("👁️", help="Ver observação"):
+                        st.info(obs_text)
+                else:
+                    # Deixa a célula vazia se não houver observação
+                    row_cols[6].write("")
+                
+                # Botão de deletar agora na última coluna
                 if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
                     st.session_state.deleting_log_id = row['ID Troca']
                     st.rerun()
 
-    # --- PÁGINA: GERENCIAR SETORES ---
+    # --- PÁGINA: GERENCIAR SETORES (sem alterações) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
@@ -353,7 +361,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (sem alterações) ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
         if 'deleting_equip_id' not in st.session_state:
@@ -429,7 +437,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
                                     
-    # --- NOVA PÁGINA: GERENCIAR SUPRIMENTOS ---
+    # --- PÁGINA: GERENCIAR SUPRIMENTOS (sem alterações) ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
 
