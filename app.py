@@ -463,7 +463,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
                                     
-    # --- PÁGINA: GERENCIAR SUPRIMENTOS ---
+# --- PÁGINA: GERENCIAR SUPRIMENTOS ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
 
@@ -472,13 +472,33 @@ def run_app():
                 st.write("Preencha os detalhes do novo modelo de suprimento.")
                 
                 modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)")
-                categoria = st.selectbox("Categoria", ["Cartucho de Tinta", "Suprimento Laser"])
+
+                # --- MUDANÇA #1: Definir as opções em variáveis ---
+                # Isso evita qualquer erro de digitação ou caractere oculto.
+                OPCAO_TINTA = "Cartucho de Tinta"
+                OPCAO_LASER = "Suprimento Laser"
                 
-                # --- CÓDIGO CORRIGIDO ---
-                if categoria == "Cartucho de Tinta":
-                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"])
-                else: # Se a categoria for "Suprimento Laser"
-                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"])
+                categoria = st.selectbox(
+                    "Categoria",
+                    [OPCAO_TINTA, OPCAO_LASER],
+                    key='categoria_suprimento' # Adicionando uma chave única
+                )
+
+                # --- MUDANÇA #2: Linha de Debug ---
+                # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
+                # Coloquei entre colchetes para vermos se há espaços em branco.
+                st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
+
+                tipo = None # Inicializa a variável tipo
+                
+                # --- MUDANÇA #3: Lógica Reforçada ---
+                # Usamos as variáveis para a comparação e adicionamos chaves únicas
+                # para garantir que o Streamlit não confunda os campos.
+                if categoria == OPCAO_TINTA:
+                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='tipo_tinta')
+                
+                elif categoria == OPCAO_LASER:
+                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='tipo_laser')
 
                 if st.form_submit_button("Adicionar Suprimento"):
                     if modelo and categoria and tipo:
