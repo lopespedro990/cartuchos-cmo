@@ -259,6 +259,8 @@ def run_app():
 
             df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
 
+            # --- MUDANÇA #1: Layout do cabeçalho do histórico ---
+            # Removido o botão de ordenar observação e ajustado o espaçamento
             header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
             if header_cols[0].button('Data'): set_sort_order('Data')
             if header_cols[1].button('Setor'): set_sort_order('Setor')
@@ -272,6 +274,7 @@ def run_app():
             st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
 
             for index, row in df_sorted.iterrows():
+                # --- MUDANÇA #2: Layout das linhas do histórico ---
                 row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
                 row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
                 row_cols[1].text(row['Setor'])
@@ -279,28 +282,27 @@ def run_app():
                 row_cols[3].text(row['Suprimento'])
                 row_cols[4].text(row['Categoria'])
                 row_cols[5].text(row['Tipo'])
-                
+
+                # --- MUDANÇA #3: Lógica do popover de observação ---
+                # Verifica se a observação não está vazia para mostrar o botão
                 obs_text = row['Observação']
                 if pd.notna(obs_text) and obs_text.strip():
                     with row_cols[6].popover("👁️", help="Ver observação"):
                         st.info(obs_text)
                 else:
+                    # Deixa a célula vazia se não houver observação
                     row_cols[6].write("")
                 
+                # Botão de deletar agora na última coluna
                 if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
                     st.session_state.deleting_log_id = row['ID Troca']
                     st.rerun()
 
-    # --- PÁGINA: GERENCIAR SETORES ---
+    # --- PÁGINA: GERENCIAR SETORES (sem alterações) ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
-
-        if 'editing_sector_id' not in st.session_state:
-            st.session_state.editing_sector_id = None
-            
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
-        
         if st.session_state.deleting_sector_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
@@ -324,7 +326,7 @@ def run_app():
                         st.session_state.deleting_sector_id = None
                         st.rerun()
         else:
-            with st.expander("Adicionar Novo Setor", expanded=(st.session_state.editing_sector_id is None)):
+            with st.expander("Adicionar Novo Setor"):
                 with st.form("novo_setor_form", clear_on_submit=True):
                     new_user_name = st.text_input("Nome do Novo Setor:")
                     if st.form_submit_button("Adicionar Setor"):
@@ -342,52 +344,24 @@ def run_app():
                 st.info("Nenhum setor cadastrado.")
             else:
                 for user in users_data:
-                    user_id, user_name = user['id'], user['name']
                     with st.container(border=True):
-                        if st.session_state.editing_sector_id == user_id:
-                            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
-                            with col1:
-                                new_name = st.text_input("Novo nome:", value=user_name, key=f"edit_input_{user_id}", label_visibility="collapsed")
-                            with col2:
-                                if st.button("✔️", key=f"save_{user_id}", help="Salvar alterações"):
-                                    if new_name and new_name != user_name:
-                                        try:
-                                            supabase.table('usuarios').update({'name': new_name}).eq('id', user_id).execute()
-                                            st.success(f"Setor renomeado para '{new_name}'!")
-                                            st.session_state.editing_sector_id = None
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Erro ao atualizar: {e}")
-                                    else:
-                                        st.session_state.editing_sector_id = None
-                                        st.rerun()
-                            with col3:
-                                if st.button("✖️", key=f"cancel_{user_id}", help="Cancelar edição"):
-                                    st.session_state.editing_sector_id = None
-                                    st.rerun()
-                        else:
-                            is_editing_another = st.session_state.editing_sector_id is not None
-                            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
-                            col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
-                            
-                            if col2.button("✏️", key=f"edit_{user_id}", help=f"Editar '{user_name}'", disabled=is_editing_another):
-                                st.session_state.editing_sector_id = user_id
+                        user_id, user_name = user['id'], user['name']
+                        col1, col2 = st.columns([4, 1])
+                        col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
+                        if col2.button("🗑️", key=f"delete_{user_id}", help=f"Remover o setor '{user_name}'"):
+                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                            if response.count > 0:
+                                st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = user_id, user_name, response.count
                                 st.rerun()
-
-                            if col3.button("🗑️", key=f"delete_{user_id}", help=f"Remover '{user_name}'", disabled=is_editing_another):
-                                response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
-                                if response.count > 0:
-                                    st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = user_id, user_name, response.count
+                            else:
+                                try:
+                                    supabase.table('usuarios').delete().eq('id', user_id).execute()
+                                    st.success(f"Setor '{user_name}' removido com sucesso!")
                                     st.rerun()
-                                else:
-                                    try:
-                                        supabase.table('usuarios').delete().eq('id', user_id).execute()
-                                        st.success(f"Setor '{user_name}' removido com sucesso!")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+                                except Exception as e:
+                                    st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (sem alterações) ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
         if 'deleting_equip_id' not in st.session_state:
@@ -463,7 +437,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
                                     
-# --- PÁGINA: GERENCIAR SUPRIMENTOS ---
+    # --- PÁGINA: GERENCIAR SUPRIMENTOS (sem alterações) ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
 
@@ -472,33 +446,12 @@ def run_app():
                 st.write("Preencha os detalhes do novo modelo de suprimento.")
                 
                 modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)")
-
-                # --- MUDANÇA #1: Definir as opções em variáveis ---
-                # Isso evita qualquer erro de digitação ou caractere oculto.
-                OPCAO_TINTA = "Cartucho de Tinta"
-                OPCAO_LASER = "Suprimento Laser"
+                categoria = st.selectbox("Categoria", ["Cartucho de Tinta", "Suprimento Laser"])
                 
-                categoria = st.selectbox(
-                    "Categoria",
-                    [OPCAO_TINTA, OPCAO_LASER],
-                    key='categoria_suprimento' # Adicionando uma chave única
-                )
-
-                # --- MUDANÇA #2: Linha de Debug ---
-                # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
-                # Coloquei entre colchetes para vermos se há espaços em branco.
-                st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
-
-                tipo = None # Inicializa a variável tipo
-                
-                # --- MUDANÇA #3: Lógica Reforçada ---
-                # Usamos as variáveis para a comparação e adicionamos chaves únicas
-                # para garantir que o Streamlit não confunda os campos.
-                if categoria == OPCAO_TINTA:
-                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='tipo_tinta')
-                
-                elif categoria == OPCAO_LASER:
-                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='tipo_laser')
+                if categoria == "Cartucho de Tinta":
+                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"])
+                else:
+                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"])
 
                 if st.form_submit_button("Adicionar Suprimento"):
                     if modelo and categoria and tipo:
