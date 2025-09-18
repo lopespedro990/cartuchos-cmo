@@ -500,9 +500,11 @@ def run_app():
                             'tipo': tipo
                         }).execute()
                         st.success(f"Suprimento '{modelo}' adicionado ao catálogo!")
-                        # Limpa os campos (simula clear_on_submit)
-                        st.session_state['new_suprimento_modelo'] = ''
-                        st.session_state['new_suprimento_categoria'] = OPCAO_TINTA  # Ou None, se preferir resetar para vazio
+                        # Limpa os campos deletando as keys do session_state
+                        if 'new_suprimento_modelo' in st.session_state:
+                            del st.session_state['new_suprimento_modelo']
+                        if 'new_suprimento_categoria' in st.session_state:
+                            del st.session_state['new_suprimento_categoria']
                         if 'new_suprimento_tipo_tinta' in st.session_state:
                             del st.session_state['new_suprimento_tipo_tinta']
                         if 'new_suprimento_tipo_laser' in st.session_state:
