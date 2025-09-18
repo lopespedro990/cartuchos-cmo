@@ -480,10 +480,6 @@ def run_app():
                 [OPCAO_TINTA, OPCAO_LASER],
                 key='new_suprimento_categoria'
             )
-            # --- MUDANÇA #2: Linha de Debug ---
-            # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
-            # Coloquei entre colchetes para vermos se há espaços em branco.
-            st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
             tipo = None # Inicializa a variável tipo
            
             # --- MUDANÇA #3: Lógica Reforçada ---
