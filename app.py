@@ -34,13 +34,20 @@ def get_users():
     return response.data
 
 def get_change_logs():
-    response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo, categoria)').order('data_troca', desc=True).execute()
+    response = supabase.table('trocas_cartucho').select('*, usuarios(name), equipamentos(modelo), suprimentos(modelo, categoria, tipo)').order('data_troca', desc=True).execute()
     return response.data
 
 def get_equipamentos(setor_id=None):
     query = supabase.table('equipamentos').select('id, modelo, categoria, usuarios(name)').order('modelo')
     if setor_id:
         query = query.eq('setor_id', setor_id)
+    response = query.execute()
+    return response.data
+
+def get_suprimentos(categoria=None):
+    query = supabase.table('suprimentos').select('*').order('modelo')
+    if categoria:
+        query = query.eq('categoria', categoria)
     response = query.execute()
     return response.data
 
@@ -59,7 +66,7 @@ def run_app():
     st.title("🖨️ Gerenciador de Suprimentos de Impressão")
     st.markdown("---")
 
-    page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores", "Gerenciar Equipamentos"])
+    page = st.sidebar.radio("Selecione uma página", ["Registrar Troca", "Dashboard de Análise", "Gerenciar Setores", "Gerenciar Equipamentos", "Gerenciar Suprimentos"])
 
     # --- PÁGINA: REGISTRAR TROCA ---
     if page == "Registrar Troca":
@@ -70,46 +77,57 @@ def run_app():
         else:
             user_map = {user['name']: user['id'] for user in users}
             selected_user_name = st.selectbox("1. Selecione o Setor:", options=user_map.keys(), index=None, placeholder="Escolha um setor...")
+
             if selected_user_name:
                 selected_user_id = user_map[selected_user_name]
                 equipamentos_no_setor = get_equipamentos(setor_id=selected_user_id)
+                
                 if not equipamentos_no_setor:
                     st.warning(f"O setor '{selected_user_name}' não possui equipamentos cadastrados.")
                 else:
                     equipamento_map = {eq['modelo']: {'id': eq['id'], 'categoria': eq['categoria']} for eq in equipamentos_no_setor}
                     selected_equipamento_modelo = st.selectbox("2. Selecione o Equipamento:", options=equipamento_map.keys(), index=None, placeholder="Escolha um equipamento...")
+
                     if selected_equipamento_modelo:
                         selected_equipamento_id = equipamento_map[selected_equipamento_modelo]['id']
                         categoria_do_equipamento = equipamento_map[selected_equipamento_modelo]['categoria']
+
                         if not categoria_do_equipamento:
-                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida.")
+                            st.error(f"O equipamento '{selected_equipamento_modelo}' não tem uma categoria definida. Por favor, edite-o na página 'Gerenciar Equipamentos'.")
                         else:
-                            if categoria_do_equipamento == "Cartucho de Tinta":
-                                opcoes_tipo = ["Preto", "Colorido"]
-                            elif categoria_do_equipamento == "Suprimento Laser":
-                                opcoes_tipo = ["Toner", "Cilindro"]
+                            suprimentos_disponiveis = get_suprimentos(categoria=categoria_do_equipamento)
+                            
+                            if not suprimentos_disponiveis:
+                                st.warning(f"Nenhum suprimento da categoria '{categoria_do_equipamento}' cadastrado. Vá para 'Gerenciar Suprimentos' para adicionar.")
                             else:
-                                opcoes_tipo = []
-                            st.markdown("---")
-                            with st.form("registro_troca_form"):
-                                st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}** (Categoria: *{categoria_do_equipamento}*)")
-                                tipos_a_registrar = st.multiselect(f"3. Marque o(s) tipo(s) de '{categoria_do_equipamento}' trocado(s):", opcoes_tipo, placeholder="Selecione as opções")
-                                change_date = st.date_input("4. Data da Troca:", datetime.now())
-                                if st.form_submit_button("Registrar Troca"):
-                                    if not tipos_a_registrar:
-                                        st.error("Por favor, selecione pelo menos um tipo de suprimento.")
-                                    else:
-                                        formatted_date = change_date.strftime("%Y-%m-%d")
-                                        sucessos, erros = 0, []
-                                        for tipo in tipos_a_registrar:
+                                suprimento_map = {f"{sup['modelo']} ({sup['tipo']})": sup['id'] for sup in suprimentos_disponiveis}
+
+                                st.markdown("---")
+                                with st.form("registro_troca_form"):
+                                    st.info(f"Registrando para: **{selected_user_name}** | **{selected_equipamento_modelo}**")
+                                    
+                                    suprimento_selecionado_modelo = st.selectbox("3. Selecione o Suprimento Trocado:", options=suprimento_map.keys())
+                                    change_date = st.date_input("4. Data da Troca:", datetime.now())
+                                    
+                                    observacao = st.text_area("5. Observações (opcional):", placeholder="Ex: Cartucho antigo falhando, manchando a página, etc.")
+                                    
+                                    if st.form_submit_button("Registrar Troca"):
+                                        if not suprimento_selecionado_modelo:
+                                            st.error("Por favor, selecione um suprimento.")
+                                        else:
+                                            suprimento_id = suprimento_map[suprimento_selecionado_modelo]
+                                            formatted_date = change_date.strftime("%Y-%m-%d")
                                             try:
-                                                supabase.table('trocas_cartucho').insert({'usuario_id': selected_user_id, 'equipamento_id': selected_equipamento_id, 'data_troca': formatted_date, 'tipo': tipo}).execute()
-                                                sucessos += 1
+                                                supabase.table('trocas_cartucho').insert({
+                                                    'usuario_id': selected_user_id, 
+                                                    'equipamento_id': selected_equipamento_id,
+                                                    'data_troca': formatted_date,
+                                                    'suprimento_id': suprimento_id,
+                                                    'observacao': observacao 
+                                                }).execute()
+                                                st.success("Registro de troca criado com sucesso!")
                                             except Exception as e:
-                                                erros.append(f"Falha ao registrar '{tipo}': {e}")
-                                        if sucessos > 0: st.success(f"{sucessos} registro(s) criado(s) com sucesso!")
-                                        if erros: 
-                                            for erro in erros: st.error(erro)
+                                                st.error(f"Falha ao registrar: {e}")
 
     # --- PÁGINA: DASHBOARD DE ANÁLISE ---
     elif page == "Dashboard de Análise":
@@ -128,11 +146,14 @@ def run_app():
             processed_logs = []
             for log in logs:
                 processed_logs.append({
-                    'ID Troca': log['id'], 'Data': log['data_troca'],
+                    'ID Troca': log.get('id'), 
+                    'Data': log.get('data_troca'),
                     'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
                     'Equipamento': log.get('equipamentos', {}).get('modelo', 'Não especificado'),
-                    'Categoria': log.get('equipamentos', {}).get('categoria', 'Não definida'),
-                    'Tipo': log.get('tipo', 'Não definido')
+                    'Suprimento': log.get('suprimentos', {}).get('modelo', 'Não especificado'),
+                    'Categoria': log.get('suprimentos', {}).get('categoria', 'Não definida'),
+                    'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido'),
+                    'Observação': log.get('observacao', '')
                 })
             
             df = pd.DataFrame(processed_logs)
@@ -181,13 +202,33 @@ def run_app():
                 st.plotly_chart(fig_line, use_container_width=True)
             
             st.markdown("---")
-            titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
-            st.subheader(titulo_historico)
+
+            col_titulo, col_download = st.columns([3, 1])
+            with col_titulo:
+                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
+                st.subheader(titulo_historico)
+            
+            with col_download:
+                @st.cache_data
+                def convert_df_to_csv(df_to_convert):
+                    return df_to_convert.to_csv(index=False).encode('utf-8')
+
+                df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo', 'Observação']].copy()
+                df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
+                
+                csv = convert_df_to_csv(df_export)
+                
+                st.download_button(
+                    label="📥 Exportar para CSV",
+                    data=csv,
+                    file_name=f'historico_trocas_{mes_selecionado}_{categoria_filtrada}.csv',
+                    mime='text/csv',
+                )
 
             if st.session_state.deleting_log_id is not None:
                 log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
                 st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
-                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Equipamento:** {log_details['Equipamento']}, **Tipo:** {log_details['Tipo']}")
+                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Equipamento:** {log_details['Equipamento']}, **Suprimento:** {log_details['Suprimento']}")
                 with st.form("confirm_delete_log_form"):
                     password = st.text_input("Para confirmar, digite a senha de exclusão:", type="password")
                     col_confirm, col_cancel = st.columns(2)
@@ -218,32 +259,48 @@ def run_app():
 
             df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
 
-            header_cols = st.columns([2, 2, 3, 2, 2, 1])
+            header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
             if header_cols[0].button('Data'): set_sort_order('Data')
             if header_cols[1].button('Setor'): set_sort_order('Setor')
             if header_cols[2].button('Equipamento'): set_sort_order('Equipamento')
-            if header_cols[3].button('Categoria'): set_sort_order('Categoria')
-            if header_cols[4].button('Tipo'): set_sort_order('Tipo')
-            header_cols[5].write("**Ação**")
+            if header_cols[3].button('Suprimento'): set_sort_order('Suprimento')
+            if header_cols[4].button('Categoria'): set_sort_order('Categoria')
+            if header_cols[5].button('Tipo'): set_sort_order('Tipo')
+            header_cols[6].write("**OBS**")
+            header_cols[7].write("**Ação**")
 
             st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
 
             for index, row in df_sorted.iterrows():
-                row_cols = st.columns([2, 2, 3, 2, 2, 1])
+                row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
                 row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
                 row_cols[1].text(row['Setor'])
                 row_cols[2].text(row['Equipamento'])
-                row_cols[3].text(row['Categoria'])
-                row_cols[4].text(row['Tipo'])
-                if row_cols[5].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
+                row_cols[3].text(row['Suprimento'])
+                row_cols[4].text(row['Categoria'])
+                row_cols[5].text(row['Tipo'])
+                
+                obs_text = row['Observação']
+                if pd.notna(obs_text) and obs_text.strip():
+                    with row_cols[6].popover("👁️", help="Ver observação"):
+                        st.info(obs_text)
+                else:
+                    row_cols[6].write("")
+                
+                if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
                     st.session_state.deleting_log_id = row['ID Troca']
                     st.rerun()
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
+
+        if 'editing_sector_id' not in st.session_state:
+            st.session_state.editing_sector_id = None
+            
         if 'deleting_sector_id' not in st.session_state:
             st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = None, None, 0
+        
         if st.session_state.deleting_sector_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o setor **'{st.session_state.deleting_sector_name}'** e todos os seus **{st.session_state.deleting_sector_logs_count}** registros. Esta ação é irreversível.")
             with st.form("confirm_delete_form"):
@@ -267,7 +324,7 @@ def run_app():
                         st.session_state.deleting_sector_id = None
                         st.rerun()
         else:
-            with st.expander("Adicionar Novo Setor"):
+            with st.expander("Adicionar Novo Setor", expanded=(st.session_state.editing_sector_id is None)):
                 with st.form("novo_setor_form", clear_on_submit=True):
                     new_user_name = st.text_input("Nome do Novo Setor:")
                     if st.form_submit_button("Adicionar Setor"):
@@ -285,32 +342,56 @@ def run_app():
                 st.info("Nenhum setor cadastrado.")
             else:
                 for user in users_data:
+                    user_id, user_name = user['id'], user['name']
                     with st.container(border=True):
-                        user_id, user_name = user['id'], user['name']
-                        col1, col2 = st.columns([4, 1])
-                        col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
-                        if col2.button("🗑️", key=f"delete_{user_id}", help=f"Remover o setor '{user_name}'"):
-                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
-                            if response.count > 0:
-                                st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = user_id, user_name, response.count
-                                st.rerun()
-                            else:
-                                try:
-                                    supabase.table('usuarios').delete().eq('id', user_id).execute()
-                                    st.success(f"Setor '{user_name}' removido com sucesso!")
+                        if st.session_state.editing_sector_id == user_id:
+                            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+                            with col1:
+                                new_name = st.text_input("Novo nome:", value=user_name, key=f"edit_input_{user_id}", label_visibility="collapsed")
+                            with col2:
+                                if st.button("✔️", key=f"save_{user_id}", help="Salvar alterações"):
+                                    if new_name and new_name != user_name:
+                                        try:
+                                            supabase.table('usuarios').update({'name': new_name}).eq('id', user_id).execute()
+                                            st.success(f"Setor renomeado para '{new_name}'!")
+                                            st.session_state.editing_sector_id = None
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Erro ao atualizar: {e}")
+                                    else:
+                                        st.session_state.editing_sector_id = None
+                                        st.rerun()
+                            with col3:
+                                if st.button("✖️", key=f"cancel_{user_id}", help="Cancelar edição"):
+                                    st.session_state.editing_sector_id = None
                                     st.rerun()
-                                except Exception as e:
-                                    st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
+                        else:
+                            is_editing_another = st.session_state.editing_sector_id is not None
+                            col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
+                            col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
+                            
+                            if col2.button("✏️", key=f"edit_{user_id}", help=f"Editar '{user_name}'", disabled=is_editing_another):
+                                st.session_state.editing_sector_id = user_id
+                                st.rerun()
+
+                            if col3.button("🗑️", key=f"delete_{user_id}", help=f"Remover '{user_name}'", disabled=is_editing_another):
+                                response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
+                                if response.count > 0:
+                                    st.session_state.deleting_sector_id, st.session_state.deleting_sector_name, st.session_state.deleting_sector_logs_count = user_id, user_name, response.count
+                                    st.rerun()
+                                else:
+                                    try:
+                                        supabase.table('usuarios').delete().eq('id', user_id).execute()
+                                        st.success(f"Setor '{user_name}' removido com sucesso!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
     # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
-
         if 'deleting_equip_id' not in st.session_state:
-            st.session_state.deleting_equip_id = None
-            st.session_state.deleting_equip_model = None
-            st.session_state.deleting_equip_logs_count = 0
-        
+            st.session_state.deleting_equip_id, st.session_state.deleting_equip_model, st.session_state.deleting_equip_logs_count = None, None, 0
         if st.session_state.deleting_equip_id is not None:
             st.warning(f"⚠️ **ATENÇÃO:** Você está prestes a apagar o equipamento **'{st.session_state.deleting_equip_model}'** e todos os seus **{st.session_state.deleting_equip_logs_count}** registros de troca. Esta ação é irreversível.")
             with st.form("confirm_delete_equip_form"):
@@ -322,7 +403,6 @@ def run_app():
                             try:
                                 supabase.table('trocas_cartucho').delete().eq('equipamento_id', st.session_state.deleting_equip_id).execute()
                                 supabase.table('equipamentos').delete().eq('id', st.session_state.deleting_equip_id).execute()
-                                
                                 st.success(f"O equipamento '{st.session_state.deleting_equip_model}' e seus registros foram removidos com sucesso!")
                                 st.session_state.deleting_equip_id = None
                                 st.rerun()
@@ -334,7 +414,6 @@ def run_app():
                     if st.form_submit_button("Cancelar"):
                         st.session_state.deleting_equip_id = None
                         st.rerun()
-        
         else:
             with st.expander("Adicionar Novo Equipamento"):
                 users_data = get_users()
@@ -350,66 +429,102 @@ def run_app():
                             if modelo_equipamento and setor_selecionado and categoria_equipamento:
                                 setor_id = setor_map[setor_selecionado]
                                 try:
-                                    supabase.table('equipamentos').insert({
-                                        'modelo': modelo_equipamento,
-                                        'setor_id': setor_id,
-                                        'categoria': categoria_equipamento
-                                    }).execute()
+                                    supabase.table('equipamentos').insert({'modelo': modelo_equipamento, 'setor_id': setor_id, 'categoria': categoria_equipamento}).execute()
                                     st.success(f"Equipamento '{modelo_equipamento}' adicionado com sucesso!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao adicionar o equipamento: {e}")
                             else:
                                 st.error("Por favor, preencha todos os campos.")
-            
             st.markdown("---")
             st.subheader("Lista de Equipamentos Cadastrados")
             equipamentos_data = get_equipamentos()
             if not equipamentos_data:
                 st.info("Nenhum equipamento cadastrado.")
             else:
-                processed_equipamentos = []
                 for item in equipamentos_data:
-                    processed_equipamentos.append({
-                        "Modelo": item['modelo'],
-                        "Categoria": item.get('categoria', 'Não definida'),
-                        "Setor Associado": item['usuarios']['name'] if item.get('usuarios') else "N/A"
-                    })
-                df_equipamentos = pd.DataFrame(processed_equipamentos)
-                st.dataframe(df_equipamentos, use_container_width=True, hide_index=True)
-            
-            # MUDANÇA: Seção de remoção agora dentro de um expander
-            with st.expander("Remover um Equipamento"):
-                equipamentos_data_delete = get_equipamentos()
-                if not equipamentos_data_delete:
-                    st.info("Nenhum equipamento para remover.")
-                else:
-                    equipamento_map_delete = {f"{item['modelo']} ({item['usuarios']['name']})": {'id': item['id'], 'modelo': item['modelo']} for item in equipamentos_data_delete if item.get('usuarios')}
-                    equipamento_selecionado_para_deletar = st.selectbox(
-                        "Selecione um equipamento para remover:",
-                        options=equipamento_map_delete.keys()
-                    )
-                    
-                    if st.button("Remover Equipamento Selecionado", type="primary"):
-                        if equipamento_selecionado_para_deletar:
-                            equip_info = equipamento_map_delete[equipamento_selecionado_para_deletar]
-                            equip_id_to_delete = equip_info['id']
-                            equip_model_to_delete = equip_info['modelo']
-                            
-                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id_to_delete).execute()
-                            
+                    with st.container(border=True):
+                        equip_id, equip_model, equip_category = item['id'], item['modelo'], item.get('categoria', 'N/A')
+                        sector_name = item['usuarios']['name'] if item.get('usuarios') else "N/A"
+                        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                        col1.text(equip_model)
+                        col2.text(equip_category)
+                        col3.text(sector_name)
+                        if col4.button("🗑️", key=f"del_equip_{equip_id}", help="Remover este equipamento"):
+                            response = supabase.table('trocas_cartucho').select('id', count='exact').eq('equipamento_id', equip_id).execute()
                             if response.count > 0:
-                                st.session_state.deleting_equip_id = equip_id_to_delete
-                                st.session_state.deleting_equip_model = equipamento_selecionado_para_deletar
-                                st.session_state.deleting_equip_logs_count = response.count
+                                st.session_state.deleting_equip_id, st.session_state.deleting_equip_model, st.session_state.deleting_equip_logs_count = equip_id, equip_model, response.count
                                 st.rerun()
                             else:
                                 try:
-                                    supabase.table('equipamentos').delete().eq('id', equip_id_to_delete).execute()
-                                    st.success(f"Equipamento '{equipamento_selecionado_para_deletar}' removido com sucesso!")
+                                    supabase.table('equipamentos').delete().eq('id', equip_id).execute()
+                                    st.success(f"Equipamento '{equip_model}' removido com sucesso!")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
+                                    
+# --- PÁGINA: GERENCIAR SUPRIMENTOS ---
+    elif page == "Gerenciar Suprimentos":
+        st.header("Gerenciar Suprimentos (Catálogo)")
+
+        with st.expander("Adicionar Novo Suprimento ao Catálogo"):
+            with st.form("novo_suprimento_form", clear_on_submit=True):
+                st.write("Preencha os detalhes do novo modelo de suprimento.")
+                
+                modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)")
+
+                # --- MUDANÇA #1: Definir as opções em variáveis ---
+                # Isso evita qualquer erro de digitação ou caractere oculto.
+                OPCAO_TINTA = "Cartucho de Tinta"
+                OPCAO_LASER = "Suprimento Laser"
+                
+                categoria = st.selectbox(
+                    "Categoria",
+                    [OPCAO_TINTA, OPCAO_LASER],
+                    key='categoria_suprimento' # Adicionando uma chave única
+                )
+
+                # --- MUDANÇA #2: Linha de Debug ---
+                # Esta linha vai nos mostrar o valor exato que o Streamlit está lendo.
+                # Coloquei entre colchetes para vermos se há espaços em branco.
+                st.info(f"DEBUG: Categoria selecionada é: [{categoria}]")
+
+                tipo = None # Inicializa a variável tipo
+                
+                # --- MUDANÇA #3: Lógica Reforçada ---
+                # Usamos as variáveis para a comparação e adicionamos chaves únicas
+                # para garantir que o Streamlit não confunda os campos.
+                if categoria == OPCAO_TINTA:
+                    tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='tipo_tinta')
+                
+                elif categoria == OPCAO_LASER:
+                    tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='tipo_laser')
+
+                if st.form_submit_button("Adicionar Suprimento"):
+                    if modelo and categoria and tipo:
+                        try:
+                            supabase.table('suprimentos').insert({
+                                'modelo': modelo,
+                                'categoria': categoria,
+                                'tipo': tipo
+                            }).execute()
+                            st.success(f"Suprimento '{modelo}' adicionado ao catálogo!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ocorreu um erro: {e}")
+                    else:
+                        st.error("Por favor, preencha todos os campos.")
+
+        st.markdown("---")
+        st.subheader("Catálogo de Suprimentos Cadastrados")
+        
+        suprimentos_data = get_suprimentos()
+        if not suprimentos_data:
+            st.info("Nenhum suprimento cadastrado.")
+        else:
+            df_suprimentos = pd.DataFrame(suprimentos_data).drop(columns=['created_at', 'id'])
+            st.dataframe(df_suprimentos, use_container_width=True, hide_index=True)
+
 
 # --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
 if 'password_correct' not in st.session_state:
