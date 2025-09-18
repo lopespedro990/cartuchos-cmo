@@ -109,8 +109,6 @@ def run_app():
                                     suprimento_selecionado_modelo = st.selectbox("3. Selecione o Suprimento Trocado:", options=suprimento_map.keys())
                                     change_date = st.date_input("4. Data da Troca:", datetime.now())
                                     
-                                    observacao = st.text_area("5. Observações (opcional):", placeholder="Ex: Cartucho antigo falhando, manchando a página, etc.")
-                                    
                                     if st.form_submit_button("Registrar Troca"):
                                         if not suprimento_selecionado_modelo:
                                             st.error("Por favor, selecione um suprimento.")
@@ -122,8 +120,7 @@ def run_app():
                                                     'usuario_id': selected_user_id, 
                                                     'equipamento_id': selected_equipamento_id,
                                                     'data_troca': formatted_date,
-                                                    'suprimento_id': suprimento_id,
-                                                    'observacao': observacao 
+                                                    'suprimento_id': suprimento_id
                                                 }).execute()
                                                 st.success("Registro de troca criado com sucesso!")
                                             except Exception as e:
@@ -152,8 +149,7 @@ def run_app():
                     'Equipamento': log.get('equipamentos', {}).get('modelo', 'Não especificado'),
                     'Suprimento': log.get('suprimentos', {}).get('modelo', 'Não especificado'),
                     'Categoria': log.get('suprimentos', {}).get('categoria', 'Não definida'),
-                    'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido'),
-                    'Observação': log.get('observacao', '')
+                    'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido')
                 })
             
             df = pd.DataFrame(processed_logs)
@@ -202,28 +198,8 @@ def run_app():
                 st.plotly_chart(fig_line, use_container_width=True)
             
             st.markdown("---")
-
-            col_titulo, col_download = st.columns([3, 1])
-            with col_titulo:
-                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
-                st.subheader(titulo_historico)
-            
-            with col_download:
-                @st.cache_data
-                def convert_df_to_csv(df_to_convert):
-                    return df_to_convert.to_csv(index=False).encode('utf-8')
-
-                df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo', 'Observação']].copy()
-                df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
-                
-                csv = convert_df_to_csv(df_export)
-                
-                st.download_button(
-                    label="📥 Exportar para CSV",
-                    data=csv,
-                    file_name=f'historico_trocas_{mes_selecionado}_{categoria_filtrada}.csv',
-                    mime='text/csv',
-                )
+            titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
+            st.subheader(titulo_historico)
 
             if st.session_state.deleting_log_id is not None:
                 log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
@@ -259,46 +235,30 @@ def run_app():
 
             df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
 
-            # --- MUDANÇA #1: Layout do cabeçalho do histórico ---
-            # Removido o botão de ordenar observação e ajustado o espaçamento
-            header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
+            header_cols = st.columns([2, 2, 3, 3, 2, 2, 1])
             if header_cols[0].button('Data'): set_sort_order('Data')
             if header_cols[1].button('Setor'): set_sort_order('Setor')
             if header_cols[2].button('Equipamento'): set_sort_order('Equipamento')
             if header_cols[3].button('Suprimento'): set_sort_order('Suprimento')
             if header_cols[4].button('Categoria'): set_sort_order('Categoria')
             if header_cols[5].button('Tipo'): set_sort_order('Tipo')
-            header_cols[6].write("**OBS**")
-            header_cols[7].write("**Ação**")
+            header_cols[6].write("**Ação**")
 
             st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
 
             for index, row in df_sorted.iterrows():
-                # --- MUDANÇA #2: Layout das linhas do histórico ---
-                row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
+                row_cols = st.columns([2, 2, 3, 3, 2, 2, 1])
                 row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
                 row_cols[1].text(row['Setor'])
                 row_cols[2].text(row['Equipamento'])
                 row_cols[3].text(row['Suprimento'])
                 row_cols[4].text(row['Categoria'])
                 row_cols[5].text(row['Tipo'])
-
-                # --- MUDANÇA #3: Lógica do popover de observação ---
-                # Verifica se a observação não está vazia para mostrar o botão
-                obs_text = row['Observação']
-                if pd.notna(obs_text) and obs_text.strip():
-                    with row_cols[6].popover("👁️", help="Ver observação"):
-                        st.info(obs_text)
-                else:
-                    # Deixa a célula vazia se não houver observação
-                    row_cols[6].write("")
-                
-                # Botão de deletar agora na última coluna
-                if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
+                if row_cols[6].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
                     st.session_state.deleting_log_id = row['ID Troca']
                     st.rerun()
 
-    # --- PÁGINA: GERENCIAR SETORES (sem alterações) ---
+    # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
         if 'deleting_sector_id' not in st.session_state:
@@ -361,7 +321,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover '{user_name}': {e}")
     
-    # --- PÁGINA: GERENCIAR EQUIPAMENTOS (sem alterações) ---
+    # --- PÁGINA: GERENCIAR EQUIPAMENTOS ---
     elif page == "Gerenciar Equipamentos":
         st.header("Gerenciar Equipamentos")
         if 'deleting_equip_id' not in st.session_state:
@@ -437,7 +397,7 @@ def run_app():
                                 except Exception as e:
                                     st.error(f"Ocorreu um erro ao remover o equipamento: {e}")
                                     
-    # --- PÁGINA: GERENCIAR SUPRIMENTOS (sem alterações) ---
+    # --- PÁGINA: GERENCIAR SUPRIMENTOS ---
     elif page == "Gerenciar Suprimentos":
         st.header("Gerenciar Suprimentos (Catálogo)")
 
