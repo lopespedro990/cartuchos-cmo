@@ -295,7 +295,6 @@ def run_app():
     elif page == "Gerenciar Setores":
         st.header("Gerenciar Setores")
 
-        # --- MUDANÇA #1: Inicializar o estado de edição ---
         if 'editing_sector_id' not in st.session_state:
             st.session_state.editing_sector_id = None
             
@@ -342,18 +341,14 @@ def run_app():
             if not users_data:
                 st.info("Nenhum setor cadastrado.")
             else:
-                # --- MUDANÇA #2: Lógica de exibição e edição dos setores ---
                 for user in users_data:
                     user_id, user_name = user['id'], user['name']
                     with st.container(border=True):
-                        # Se o setor atual é o que está sendo editado...
                         if st.session_state.editing_sector_id == user_id:
                             col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
                             with col1:
-                                # Mostra um campo de texto para o novo nome
                                 new_name = st.text_input("Novo nome:", value=user_name, key=f"edit_input_{user_id}", label_visibility="collapsed")
                             with col2:
-                                # Botão Salvar
                                 if st.button("✔️", key=f"save_{user_id}", help="Salvar alterações"):
                                     if new_name and new_name != user_name:
                                         try:
@@ -367,22 +362,18 @@ def run_app():
                                         st.session_state.editing_sector_id = None
                                         st.rerun()
                             with col3:
-                                # Botão Cancelar
                                 if st.button("✖️", key=f"cancel_{user_id}", help="Cancelar edição"):
                                     st.session_state.editing_sector_id = None
                                     st.rerun()
-                        # Senão, mostra a linha normal
                         else:
                             is_editing_another = st.session_state.editing_sector_id is not None
                             col1, col2, col3 = st.columns([0.8, 0.1, 0.1])
                             col1.markdown(f"<p style='margin-top: 5px; font-size: 1.1em;'>{user_name}</p>", unsafe_allow_html=True)
                             
-                            # Botão Editar
                             if col2.button("✏️", key=f"edit_{user_id}", help=f"Editar '{user_name}'", disabled=is_editing_another):
                                 st.session_state.editing_sector_id = user_id
                                 st.rerun()
 
-                            # Botão Deletar
                             if col3.button("🗑️", key=f"delete_{user_id}", help=f"Remover '{user_name}'", disabled=is_editing_another):
                                 response = supabase.table('trocas_cartucho').select('id', count='exact').eq('usuario_id', user_id).execute()
                                 if response.count > 0:
@@ -483,9 +474,10 @@ def run_app():
                 modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)")
                 categoria = st.selectbox("Categoria", ["Cartucho de Tinta", "Suprimento Laser"])
                 
+                # --- CÓDIGO CORRIGIDO ---
                 if categoria == "Cartucho de Tinta":
                     tipo = st.selectbox("Tipo", ["Preto", "Colorido"])
-                else:
+                else: # Se a categoria for "Suprimento Laser"
                     tipo = st.selectbox("Tipo", ["Toner", "Cilindro"])
 
                 if st.form_submit_button("Adicionar Suprimento"):
