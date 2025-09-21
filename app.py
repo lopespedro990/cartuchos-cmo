@@ -15,19 +15,6 @@ def init_connection():
 
 supabase = init_connection()
 
-# --- FUNÇÃO DE LOGIN ---
-def show_login_form():
-    st.title("🔐 Acesso Restrito")
-    password = st.text_input("Digite a senha para acessar:", type="password", key="password")
-
-    if st.button("Entrar"):
-        if password == st.secrets["auth"]["password"]:
-            st.session_state['password_correct'] = True
-            del st.session_state['password'] 
-            st.rerun()
-        else:
-            st.error("Senha incorreta.")
-
 # --- FUNÇÕES DA APLICAÇÃO ---
 def get_users():
     response = supabase.table('usuarios').select('id, name').order('name').execute()
@@ -55,13 +42,6 @@ def get_suprimentos(categoria=None):
 def run_app():
     logo_url = "https://www.camaraourinhos.sp.gov.br/img/customizacao/cliente/facebook/imagem_compartilhamento_redes.jpg"
     st.sidebar.image(logo_url, use_container_width=True)
-
-    if st.sidebar.button("Sair"):
-        st.session_state['password_correct'] = False
-        for key in list(st.session_state.keys()):
-            if key != 'password_correct':
-                del st.session_state[key]
-        st.rerun()
 
     st.title("🖨️ Gerenciador de Suprimentos de Impressão")
     st.markdown("---")
@@ -468,26 +448,26 @@ def run_app():
         st.header("Gerenciar Suprimentos (Catálogo)")
         with st.expander("Adicionar Novo Suprimento ao Catálogo"):
             st.write("Preencha os detalhes do novo modelo de suprimento.")
-           
+            
             modelo = st.text_input("Modelo (ex: HP 664, Brother TN-1060)", key='new_suprimento_modelo')
             # --- MUDANÇA #1: Definir as opções em variáveis ---
             # Isso evita qualquer erro de digitação ou caractere oculto.
             OPCAO_TINTA = "Cartucho de Tinta"
             OPCAO_LASER = "Suprimento Laser"
-           
+            
             categoria = st.selectbox(
                 "Categoria",
                 [OPCAO_TINTA, OPCAO_LASER],
                 key='new_suprimento_categoria'
             )
             tipo = None # Inicializa a variável tipo
-           
+            
             # --- MUDANÇA #3: Lógica Reforçada ---
             # Usamos as variáveis para a comparação e adicionamos chaves únicas
             # para garantir que o Streamlit não confunda os campos.
             if categoria == OPCAO_TINTA:
                 tipo = st.selectbox("Tipo", ["Preto", "Colorido"], key='new_suprimento_tipo_tinta')
-           
+            
             elif categoria == OPCAO_LASER:
                 tipo = st.selectbox("Tipo", ["Toner", "Cilindro"], key='new_suprimento_tipo_laser')
 
@@ -516,7 +496,7 @@ def run_app():
                     st.error("Por favor, preencha todos os campos.")
         st.markdown("---")
         st.subheader("Catálogo de Suprimentos Cadastrados")
-       
+        
         suprimentos_data = get_suprimentos()
         if not suprimentos_data:
             st.info("Nenhum suprimento cadastrado.")
@@ -524,11 +504,6 @@ def run_app():
             df_suprimentos = pd.DataFrame(suprimentos_data).drop(columns=['created_at', 'id'])
             st.dataframe(df_suprimentos, use_container_width=True, hide_index=True)
 
-# --- LÓGICA PRINCIPAL DE EXECUÇÃO ---
-if 'password_correct' not in st.session_state:
-    st.session_state['password_correct'] = False
-
-if st.session_state['password_correct']:
-    run_app()
-else:
-    show_login_form()
+# --- LÓGINCA PRINCIPAL DE EXECUÇÃO ---
+# Agora a aplicação é chamada diretamente, sem pedir senha.
+run_app()
