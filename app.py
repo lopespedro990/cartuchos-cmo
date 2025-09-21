@@ -109,167 +109,197 @@ def run_app():
                                             except Exception as e:
                                                 st.error(f"Falha ao registrar: {e}")
 
-    # --- PÁGINA: DASHBOARD DE ANÁLISE ---
-    elif page == "Dashboard de Análise":
-        st.header("Dashboard de Análise de Trocas")
+# --- PÁGINA: DASHBOARD DE ANÁLISE ---
+elif page == "Dashboard de Análise":
+    st.header("Dashboard de Análise de Trocas")
+    
+    if 'sort_by' not in st.session_state:
+        st.session_state.sort_by = 'Data'
+        st.session_state.sort_ascending = False
+    if 'deleting_log_id' not in st.session_state:
+        st.session_state.deleting_log_id = None
+
+    logs = get_change_logs()
+    if not logs:
+        st.info("Ainda não há registros de troca para exibir.")
+    else:
+        processed_logs = []
+        for log in logs:
+            processed_logs.append({
+                'ID Troca': log.get('id'), 
+                'Data': log.get('data_troca'),
+                'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
+                'Equipamento': log.get('equipamentos', {}).get('modelo', 'Não especificado'),
+                'Suprimento': log.get('suprimentos', {}).get('modelo', 'Não especificado'),
+                'Categoria': log.get('suprimentos', {}).get('categoria', 'Não definida'),
+                'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido'),
+                'Observação': log.get('observacao', '')
+            })
         
-        if 'sort_by' not in st.session_state:
-            st.session_state.sort_by = 'Data'
-            st.session_state.sort_ascending = False
-        if 'deleting_log_id' not in st.session_state:
+        df = pd.DataFrame(processed_logs)
+        df['Data'] = pd.to_datetime(df['Data'])
+        
+        st.sidebar.markdown("---")
+        st.sidebar.header("Filtros do Dashboard")
+        
+        # Filtro de Categoria
+        categorias_filtro = ["Todas"] + sorted(df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist())
+        categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
+        
+        # NOVO FILTRO DE SETOR
+        setores_filtro = ["Todos"] + sorted(df['Setor'].unique().tolist())
+        setor_filtrado = st.sidebar.selectbox("Filtrar por Setor:", setores_filtro)
+
+        # Filtro de Mês/Ano
+        df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
+        lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
+        mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
+        
+        # APLICAÇÃO DOS FILTROS
+        df_filtrado = df.copy()
+        if categoria_filtrada != "Todas":
+            df_filtrado = df_filtrado[df_filtrado['Categoria'] == categoria_filtrada]
+        if setor_filtrado != "Todos":
+            df_filtrado = df_filtrado[df_filtrado['Setor'] == setor_filtrado]
+        if mes_selecionado != "Todos":
+            df_filtrado = df_filtrado[df_filtrado['AnoMês'] == mes_selecionado]
+        
+        st.markdown("### Gráficos de Análise")
+        
+        if df_filtrado.empty:
+            st.warning("Nenhum registro encontrado para os filtros selecionados.")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                # LÓGICA DO GRÁFICO DE BARRAS INTELIGENTE
+                if setor_filtrado != "Todos":
+                    st.subheader("Total de Trocas por Equipamento")
+                    counts = df_filtrado['Equipamento'].value_counts().reset_index()
+                    counts.columns = ['Equipamento', 'Total de Trocas']
+                    x_axis, label_x = 'Equipamento', 'Equipamento'
+                else:
+                    st.subheader("Total de Trocas por Setor")
+                    counts = df_filtrado['Setor'].value_counts().reset_index()
+                    counts.columns = ['Setor', 'Total de Trocas']
+                    x_axis, label_x = 'Setor', 'Nome do Setor'
+
+                # Título do gráfico atualizado
+                titulo_grafico_bar = f"Filtros: ({setor_filtrado}, {categoria_filtrada}, {mes_selecionado})"
+                fig_bar = px.bar(counts, x=x_axis, y='Total de Trocas', title=titulo_grafico_bar, labels={x_axis: label_x, 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
+                fig_bar.update_traces(textposition='outside')
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            with col2:
+                st.subheader("Proporção por Tipo de Suprimento")
+                type_counts = df_filtrado['Tipo'].value_counts().reset_index()
+                type_counts.columns = ['Tipo', 'Quantidade']
+                # Título do gráfico atualizado
+                titulo_grafico_pie = f"Filtros: ({setor_filtrado}, {categoria_filtrada}, {mes_selecionado})"
+                fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            st.subheader("Trocas ao Longo do Tempo")
+            monthly_changes = df.groupby('AnoMês').size().reset_index(name='Quantidade')
+            if setor_filtrado != "Todos":
+                monthly_changes = df_filtrado.groupby('AnoMês').size().reset_index(name='Quantidade')
+            
+            # Título do gráfico atualizado
+            titulo_grafico_linha = f"Volume de Trocas por Mês ({setor_filtrado}, {categoria_filtrada})"
+            fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
+            st.plotly_chart(fig_line, use_container_width=True)
+        
+        st.markdown("---")
+
+        col_titulo, col_download = st.columns([3, 1])
+        with col_titulo:
+            # Título do histórico atualizado
+            titulo_historico = f"Histórico de Trocas ({setor_filtrado}, {categoria_filtrada}, {mes_selecionado})"
+            st.subheader(titulo_historico)
+        
+        with col_download:
+            @st.cache_data
+            def convert_df_to_csv(df_to_convert):
+                return df_to_convert.to_csv(index=False).encode('utf-8')
+
+            df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo', 'Observação']].copy()
+            df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
+            
+            csv = convert_df_to_csv(df_export)
+            
+            # Nome do arquivo de exportação atualizado
+            st.download_button(
+                label="📥 Exportar para CSV",
+                data=csv,
+                file_name=f'historico_trocas_{setor_filtrado}_{categoria_filtrada}_{mes_selecionado}.csv',
+                mime='text/csv',
+            )
+
+        # O restante do código para exibir a tabela de histórico continua o mesmo...
+        if st.session_state.deleting_log_id is not None:
+            log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
+            st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
+            st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Equipamento:** {log_details['Equipamento']}, **Suprimento:** {log_details['Suprimento']}")
+            with st.form("confirm_delete_log_form"):
+                password = st.text_input("Para confirmar, digite a senha de exclusão:", type="password")
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.form_submit_button("Sim, apagar registro", type="primary"):
+                        if password == st.secrets["auth"].get("delete_password", st.secrets["auth"]["password"]):
+                            try:
+                                supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
+                                st.success("Registro apagado com sucesso!")
+                                st.session_state.deleting_log_id = None
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ocorreu um erro ao apagar o registro: {e}")
+                        else:
+                            st.error("Senha de exclusão incorreta.")
+                with col_cancel:
+                    if st.form_submit_button("Cancelar"):
+                        st.session_state.deleting_log_id = None
+                        st.rerun()
+        
+        def set_sort_order(column_name):
+            if st.session_state.sort_by == column_name:
+                st.session_state.sort_ascending = not st.session_state.sort_ascending
+            else:
+                st.session_state.sort_by = column_name
+                st.session_state.sort_ascending = True
             st.session_state.deleting_log_id = None
 
-        logs = get_change_logs()
-        if not logs:
-            st.info("Ainda não há registros de troca para exibir.")
-        else:
-            processed_logs = []
-            for log in logs:
-                processed_logs.append({
-                    'ID Troca': log.get('id'), 
-                    'Data': log.get('data_troca'),
-                    'Setor': log.get('usuarios', {}).get('name', 'Setor Desconhecido'),
-                    'Equipamento': log.get('equipamentos', {}).get('modelo', 'Não especificado'),
-                    'Suprimento': log.get('suprimentos', {}).get('modelo', 'Não especificado'),
-                    'Categoria': log.get('suprimentos', {}).get('categoria', 'Não definida'),
-                    'Tipo': log.get('suprimentos', {}).get('tipo', 'Não definido'),
-                    'Observação': log.get('observacao', '')
-                })
+        df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
+
+        header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
+        if header_cols[0].button('Data'): set_sort_order('Data')
+        if header_cols[1].button('Setor'): set_sort_order('Setor')
+        if header_cols[2].button('Equipamento'): set_sort_order('Equipamento')
+        if header_cols[3].button('Suprimento'): set_sort_order('Suprimento')
+        if header_cols[4].button('Categoria'): set_sort_order('Categoria')
+        if header_cols[5].button('Tipo'): set_sort_order('Tipo')
+        header_cols[6].write("**OBS**")
+        header_cols[7].write("**Ação**")
+
+        st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
+
+        for index, row in df_sorted.iterrows():
+            row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
+            row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
+            row_cols[1].text(row['Setor'])
+            row_cols[2].text(row['Equipamento'])
+            row_cols[3].text(row['Suprimento'])
+            row_cols[4].text(row['Categoria'])
+            row_cols[5].text(row['Tipo'])
             
-            df = pd.DataFrame(processed_logs)
-            df['Data'] = pd.to_datetime(df['Data'])
-            
-            st.sidebar.markdown("---")
-            st.sidebar.header("Filtros do Dashboard")
-            
-            categorias_filtro = ["Todas"] + df[df['Categoria'] != 'Não definida']['Categoria'].unique().tolist()
-            categoria_filtrada = st.sidebar.selectbox("Filtrar por Categoria:", categorias_filtro)
-            
-            df['AnoMês'] = df['Data'].dt.strftime('%Y-%m')
-            lista_meses = ["Todos"] + sorted(df['AnoMês'].unique(), reverse=True)
-            mes_selecionado = st.sidebar.selectbox("Filtrar por Mês/Ano:", options=lista_meses)
-            
-            df_filtrado = df.copy()
-            if categoria_filtrada != "Todas":
-                df_filtrado = df_filtrado[df_filtrado['Categoria'] == categoria_filtrada]
-            if mes_selecionado != "Todos":
-                df_filtrado = df_filtrado[df_filtrado['AnoMês'] == mes_selecionado]
-            
-            st.markdown("### Gráficos de Análise")
-            
-            if df_filtrado.empty:
-                st.warning("Nenhum registro encontrado para os filtros selecionados.")
+            obs_text = row['Observação']
+            if pd.notna(obs_text) and obs_text.strip():
+                with row_cols[6].popover("👁️", help="Ver observação"):
+                    st.info(obs_text)
             else:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.subheader("Total de Trocas por Setor")
-                    user_counts = df_filtrado['Setor'].value_counts().reset_index()
-                    user_counts.columns = ['Setor', 'Total de Trocas']
-                    titulo_grafico_bar = f"Setores que mais trocaram ({categoria_filtrada}, {mes_selecionado})"
-                    fig_bar = px.bar(user_counts, x='Setor', y='Total de Trocas', title=titulo_grafico_bar, labels={'Setor': 'Nome do Setor', 'Total de Trocas': 'Quantidade'}, text='Total de Trocas')
-                    fig_bar.update_traces(textposition='outside'); st.plotly_chart(fig_bar, use_container_width=True)
-                with col2:
-                    st.subheader("Proporção por Tipo de Suprimento")
-                    type_counts = df_filtrado['Tipo'].value_counts().reset_index()
-                    type_counts.columns = ['Tipo', 'Quantidade']
-                    titulo_grafico_pie = f"Proporção ({categoria_filtrada}, {mes_selecionado})"
-                    fig_pie = px.pie(type_counts, names='Tipo', values='Quantidade', title=titulo_grafico_pie, hole=.3)
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                st.subheader("Trocas ao Longo do Tempo")
-                monthly_changes = df_filtrado.groupby('AnoMês').size().reset_index(name='Quantidade')
-                titulo_grafico_linha = f"Volume de Trocas por Mês ({categoria_filtrada})"
-                fig_line = px.line(monthly_changes.sort_values(by='AnoMês'), x='AnoMês', y='Quantidade', title=titulo_grafico_linha, markers=True, labels={'AnoMês': 'Mês/Ano', 'Quantidade': 'Nº de Trocas'})
-                st.plotly_chart(fig_line, use_container_width=True)
+                row_cols[6].write("")
             
-            st.markdown("---")
-
-            col_titulo, col_download = st.columns([3, 1])
-            with col_titulo:
-                titulo_historico = f"Histórico de Trocas ({categoria_filtrada}, {mes_selecionado})"
-                st.subheader(titulo_historico)
-            
-            with col_download:
-                @st.cache_data
-                def convert_df_to_csv(df_to_convert):
-                    return df_to_convert.to_csv(index=False).encode('utf-8')
-
-                df_export = df_filtrado[['Data', 'Setor', 'Equipamento', 'Suprimento', 'Categoria', 'Tipo', 'Observação']].copy()
-                df_export['Data'] = pd.to_datetime(df_export['Data']).dt.strftime('%d/%m/%Y')
-                
-                csv = convert_df_to_csv(df_export)
-                
-                st.download_button(
-                    label="📥 Exportar para CSV",
-                    data=csv,
-                    file_name=f'historico_trocas_{mes_selecionado}_{categoria_filtrada}.csv',
-                    mime='text/csv',
-                )
-
-            if st.session_state.deleting_log_id is not None:
-                log_details = df[df['ID Troca'] == st.session_state.deleting_log_id].iloc[0]
-                st.warning(f"Você tem certeza que deseja apagar o registro abaixo?")
-                st.write(f"**Data:** {log_details['Data'].strftime('%d/%m/%Y')}, **Setor:** {log_details['Setor']}, **Equipamento:** {log_details['Equipamento']}, **Suprimento:** {log_details['Suprimento']}")
-                with st.form("confirm_delete_log_form"):
-                    password = st.text_input("Para confirmar, digite a senha de exclusão:", type="password")
-                    col_confirm, col_cancel = st.columns(2)
-                    with col_confirm:
-                        if st.form_submit_button("Sim, apagar registro", type="primary"):
-                            if password == st.secrets["auth"].get("delete_password", st.secrets["auth"]["password"]):
-                                try:
-                                    supabase.table('trocas_cartucho').delete().eq('id', st.session_state.deleting_log_id).execute()
-                                    st.success("Registro apagado com sucesso!")
-                                    st.session_state.deleting_log_id = None
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Ocorreu um erro ao apagar o registro: {e}")
-                            else:
-                                st.error("Senha de exclusão incorreta.")
-                    with col_cancel:
-                        if st.form_submit_button("Cancelar"):
-                            st.session_state.deleting_log_id = None
-                            st.rerun()
-            
-            def set_sort_order(column_name):
-                if st.session_state.sort_by == column_name:
-                    st.session_state.sort_ascending = not st.session_state.sort_ascending
-                else:
-                    st.session_state.sort_by = column_name
-                    st.session_state.sort_ascending = True
-                st.session_state.deleting_log_id = None
-
-            df_sorted = df_filtrado.sort_values(by=st.session_state.sort_by, ascending=st.session_state.sort_ascending)
-
-            header_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
-            if header_cols[0].button('Data'): set_sort_order('Data')
-            if header_cols[1].button('Setor'): set_sort_order('Setor')
-            if header_cols[2].button('Equipamento'): set_sort_order('Equipamento')
-            if header_cols[3].button('Suprimento'): set_sort_order('Suprimento')
-            if header_cols[4].button('Categoria'): set_sort_order('Categoria')
-            if header_cols[5].button('Tipo'): set_sort_order('Tipo')
-            header_cols[6].write("**OBS**")
-            header_cols[7].write("**Ação**")
-
-            st.markdown("<hr style='margin-top: -0.5em; margin-bottom: 0.5em;'>", unsafe_allow_html=True)
-
-            for index, row in df_sorted.iterrows():
-                row_cols = st.columns([2, 3, 3, 3, 2, 2, 1, 1])
-                row_cols[0].text(row['Data'].strftime('%d/%m/%Y'))
-                row_cols[1].text(row['Setor'])
-                row_cols[2].text(row['Equipamento'])
-                row_cols[3].text(row['Suprimento'])
-                row_cols[4].text(row['Categoria'])
-                row_cols[5].text(row['Tipo'])
-                
-                obs_text = row['Observação']
-                if pd.notna(obs_text) and obs_text.strip():
-                    with row_cols[6].popover("👁️", help="Ver observação"):
-                        st.info(obs_text)
-                else:
-                    row_cols[6].write("")
-                
-                if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
-                    st.session_state.deleting_log_id = row['ID Troca']
-                    st.rerun()
+            if row_cols[7].button("🗑️", key=f"del_log_{row['ID Troca']}", help="Remover este registro"):
+                st.session_state.deleting_log_id = row['ID Troca']
+                st.rerun()
 
     # --- PÁGINA: GERENCIAR SETORES ---
     elif page == "Gerenciar Setores":
