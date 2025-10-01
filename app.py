@@ -2,27 +2,28 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import psycopg2
-from psycopg2.extras import RealDictCursor
+# Alteração 1: Importar a biblioteca do MySQL/MariaDB ao invés do psycopg2
+import mysql.connector
 
-# --- CONFIGURAÇÃO DA PÁGINA E CONEXÃO POSTGRESQL ---
+# --- CONFIGURAÇÃO DA PÁGINA E CONEXÃO MARIADB ---
 st.set_page_config(layout="wide", page_title="Gerenciador de Suprimentos")
 
 @st.cache_resource
 def init_connection():
-    """Função de conexão reescrita para PostgreSQL."""
+    """Função de conexão reescrita para MariaDB/MySQL."""
     try:
-        conn = psycopg2.connect(
-            host=st.secrets["postgres"]["host"],
-            port=st.secrets["postgres"]["port"],
-            dbname=st.secrets["postgres"]["dbname"],
-            user=st.secrets["postgres"]["user"],
-            password=st.secrets["postgres"]["password"],
+        # Alteração 2: Usar mysql.connector.connect e ler as secrets da seção [mariadb]
+        conn = mysql.connector.connect(
+            host=st.secrets["connections"]["mariadb"]["host"],
+            port=st.secrets["connections"]["mariadb"]["port"],
+            database=st.secrets["connections"]["mariadb"]["database"], # 'database' ao invés de 'dbname'
+            user=st.secrets["connections"]["mariadb"]["username"], # 'username' ao invés de 'user'
+            password=st.secrets["connections"]["mariadb"]["password"],
         )
         return conn
-    except psycopg2.OperationalError as e:
-        st.error(f"Erro ao conectar ao PostgreSQL: {e}")
-        st.info("Verifique se o serviço do PostgreSQL está rodando e se as credenciais em secrets.toml estão corretas.")
+    except mysql.connector.Error as e:
+        st.error(f"Erro ao conectar ao MariaDB: {e}")
+        st.info("Verifique se o serviço do MariaDB está rodando e se as credenciais em secrets.toml estão corretas.")
         return None
 
 db_conn = init_connection()
@@ -33,7 +34,8 @@ def execute_query(query, params=None, fetch=None):
     """Função central para executar queries de forma segura."""
     if not db_conn: return None
     try:
-        with db_conn.cursor(cursor_factory=RealDictCursor) as cur:
+        # Alteração 3: Usar o cursor com 'dictionary=True' para obter resultados como dicionários
+        with db_conn.cursor(dictionary=True) as cur:
             cur.execute(query, params)
             if fetch == "one":
                 return cur.fetchone()
@@ -44,14 +46,16 @@ def execute_query(query, params=None, fetch=None):
         return None
 
 def commit_changes():
-    """Função para aplicar (commit) as alterações no banco."""
+    """Função para aplicar (commit) as alterações no banco. (Nenhuma alteração necessária)"""
     if db_conn: db_conn.commit()
 
 def rollback_changes():
-    """Função para reverter (rollback) as alterações em caso de erro."""
+    """Função para reverter (rollback) as alterações em caso de erro. (Nenhuma alteração necessária)"""
     if db_conn: db_conn.rollback()
 
-# --- FUNÇÕES DA APLICAÇÃO (Adaptadas para PostgreSQL) ---
+# --- FUNÇÕES DA APLICAÇÃO (Adaptadas para MariaDB) ---
+# Nenhuma alteração necessária aqui, pois as queries SQL são compatíveis.
+# O placeholder '%s' é o mesmo para mysql-connector e psycopg2, o que facilita a migração.
 
 def get_users():
     return execute_query("SELECT id, name FROM usuarios ORDER BY name;", fetch="all")
@@ -60,11 +64,11 @@ def get_change_logs():
     query = """
         SELECT 
             t.id, t.data_troca, t.observacao,
-            u.name as "usuarios_name",
-            e.modelo as "equipamentos_modelo",
-            s.modelo as "suprimentos_modelo",
-            s.categoria as "suprimentos_categoria",
-            s.tipo as "suprimentos_tipo"
+            u.name as usuarios_name,
+            e.modelo as equipamentos_modelo,
+            s.modelo as suprimentos_modelo,
+            s.categoria as suprimentos_categoria,
+            s.tipo as suprimentos_tipo
         FROM trocas_cartucho t
         LEFT JOIN usuarios u ON t.usuario_id = u.id
         LEFT JOIN equipamentos e ON t.equipamento_id = e.id
@@ -88,7 +92,7 @@ def get_change_logs():
     return processed_logs
 
 def get_equipamentos(setor_id=None):
-    base_query = 'SELECT e.id, e.modelo, e.categoria, u.name as "setor_name" FROM equipamentos e LEFT JOIN usuarios u ON e.setor_id = u.id'
+    base_query = 'SELECT e.id, e.modelo, e.categoria, u.name as setor_name FROM equipamentos e LEFT JOIN usuarios u ON e.setor_id = u.id'
     params = None
     if setor_id:
         base_query += " WHERE e.setor_id = %s"
