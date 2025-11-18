@@ -28,6 +28,13 @@ db_conn = init_connection()
 def execute_query(query, params=None, fetch=None):
     """Função central para executar queries de forma segura."""
     if not db_conn: return None
+        
+    if not db_conn.is_connected():
+        try:
+            db_conn.reconnect(attempts=3, delay=2)
+        except Exception as e:
+            st.error(f"Erro ao reconectar ao banco: {e}")
+            return None
     try:
         # Alteração 3: Usar o cursor com 'dictionary=True' para obter resultados como dicionários
         with db_conn.cursor(dictionary=True) as cur:
